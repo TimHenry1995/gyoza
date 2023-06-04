@@ -1,0 +1,7 @@
+pip install -e .
+change version number in pyproject.toml
+python -m build
+python -m twine upload dist/*
+
+user_name __token__
+password pypi-AgEIcHlwaS5vcmcCJDQ0YzVlNzQ1LWIwNzktNGM3ZS04ZWI4LWI2MWY4NjJkZGY3ZgACKlszLCIxMTVjNzk1OC1kNThlLTQ2MTgtYTNhMy04NGIxMDliZGE1NDIiXQAABiCB2cik4i3MzPEBqni4IUagovN0FSMZJdjVQwJStG9n5A

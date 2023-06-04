@@ -24,7 +24,7 @@ dependencies = [
     "tensorflow >= 2.8.2",
     "matplotlib >= 3.5.3",
     "PyWavelets >= 1.4.1",
-    "document-your-code >= 0.4.0"
+    "sphinx"
 ]
 
 [project.urls]

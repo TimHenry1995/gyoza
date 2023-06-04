@@ -1,7 +1,8 @@
 import numpy as np
 import tensorflow as tf
-from typing import Tuple, List, Callable
+from typing import Any, Tuple, List, Callable
 from abc import ABC
+from gyoza.utilities import tensors as utt
 
 class BasicFullyConnectedNet(tf.keras.Model):
     def __init__(self, latent_channel_count:int, output_channel_count:int, depth: int, use_tanh:bool=False, use_batch_normalization:bool=False):
@@ -73,6 +74,48 @@ class FlowLayer(tf.keras.Model, ABC):
         
         raise NotImplemented()
 
+class Mask(FlowLayer, ABC):
+    pass
+
+class CheckerBoardMask(Mask):
+    """A mask that applies a checkerboard pattern to its input."""
+
+    def __init__(self, axes: List[int]) -> None:
+        """Constructor for this class.
+        
+        Inputs:
+        - axes: The axes along which the checker board pattern shall be applied. Support one or two axes."""
+
+        # Input validity
+        assert len(axes) <= 2, "There must be at most two axes along which the checker board pattern shall be applied."
+
+        self.__axes__ = axes
+
+    def call(self, x:tf. Tensor) -> tf.Tensor:
+
+        # Case 1-dimensional
+        if len(self.__axes__) == 1:
+
+            # Initialize
+            mask = tf.zeros_like(input=x)
+
+            # Move axis 
+            mask = utt.move_axis(x=mask, from_index=self.__axes__[0], to_index= 0)
+
+            # Set ones
+            mask[::2,...] = 1
+
+            # Revert axis
+            mask = utt.move_axis(x=mask, from_index=0, to_index=self.__axes__[0])
+            
+
+
+        # Case 2-dimensional
+        # Iterate axes
+        
+
+
+
 class Shuffle(FlowLayer):
     """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen 
     once during initialization. Thereafter it is saved as a non-trainable tensorflow.Variable in a private attribute.
@@ -138,7 +181,7 @@ class CouplingLayer(FlowLayer, ABC):
 
         Inputs:
         - m: the function that shall be used to map the first half of the input to call() to weights used to transform the second 
-            half of that x in g(). Is inputs shall be a tensor with channel axis at channel_axis and channel count equal to 
+            half of that x in g(). Its inputs shall be a tensor with channel axis at channel_axis and channel count equal to 
             channel_count // 2. Its output shall be a tensor or list of tensors that can be used to transform the second half of x
             inside g(). The output requirement on m thus depends on the subclass specific implementation for g(). 
         - channel_count: the total number of channels of the input to this layer.
@@ -166,7 +209,7 @@ class CouplingLayer(FlowLayer, ABC):
         return y_hat
     
     def __g__(self, a: tf.Tensor, b: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
-        """This function implements an invertible coupling law for inputs a and b. It is invertible w.r.t. a given b.
+        """This function implements an invertible coupling law for inputs a and b. It is invertible w.r.t. a, given b.
         
         Inputs:
         - a: Tensor of arbitrary shape whose channel axis is the same as self.channel_axis. This Tensor is supposed to be the

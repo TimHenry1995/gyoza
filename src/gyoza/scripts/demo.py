@@ -1,11 +1,12 @@
 import os, numpy as np, librosa
 import matplotlib.pyplot as plt
 import pywt
+from gyoza.utilities import file_management as fm
 
 if __name__ == "__main__":
     # Read a sample file
     filename = os.path.join("src","gyoza","sample_files","63.wav")
-
+    fm.load()
     # Read an audio file using librosa
     y, sr = librosa.load(filename)
     y = y[:len(y)//100]

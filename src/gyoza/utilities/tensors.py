@@ -14,8 +14,8 @@ def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
  
     # Move axis
     new_order = list(range(len(x.shape)))
-    new_order[to_index] = from_index
-    new_order[from_index] = to_index
+    del new_order[from_index]
+    new_order.insert(to_index, from_index)
     x_new = tf.transpose(a=x, perm=new_order)
 
     # Outputs

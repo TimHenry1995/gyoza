@@ -44,11 +44,11 @@ class FlowLayer(tf.keras.Model, ABC):
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.
         
-        Inputs:
-        - x: the data to tranform.
+        Args:
+            x (tensorflow.Tensor): the data to tranform.
         
-        Outputs:
-        - y_hat: the transformed version of x."""
+        Returns:
+            tensorflow.Tensor: y_hat, the transformed version of x."""
         
         raise NotImplemented()
 
@@ -80,38 +80,35 @@ class Mask(FlowLayer, ABC):
 class CheckerBoardMask(Mask):
     """A mask that applies a checkerboard pattern to its input."""
 
-    def __init__(self, axes: List[int]) -> None:
-        """Constructor for this class.
+    def __init__(self, shape: List[int]) -> None:
+        """Constructor for this class. Creates a mask and saves it as non-trainable tf.Variable in 
+        an attribute. The mask is thus deterministic and it enables loading and saving the model.
         
         Inputs:
-        - axes: The axes along which the checker board pattern shall be applied. Support one or two axes."""
+        - shape: The shape of the checker board pattern, assumed to be of minimal dimensionality at most 2.
+            That means, a 2D spatial mask would have shape, e.g. [64, 128], disregarding the fact that 
+            batch and channel axes exist. The mask will be broadcast during use in call."""
 
         # Input validity
-        assert len(axes) <= 2, "There must be at most two axes along which the checker board pattern shall be applied."
+        assert len(shape) <= 2, "There must be at most two axes along which the checker board pattern shall be applied."
 
-        self.__axes__ = axes
-
-    def call(self, x:tf. Tensor) -> tf.Tensor:
+        # Initialize
+        mask = np.zeros(shape=shape)
 
         # Case 1-dimensional
-        if len(self.__axes__) == 1:
-
-            # Initialize
-            mask = tf.zeros_like(input=x)
-
-            # Move axis 
-            mask = utt.move_axis(x=mask, from_index=self.__axes__[0], to_index= 0)
+        if len(shape) == 1:
 
             # Set ones
             mask[::2,...] = 1
 
-            # Revert axis
-            mask = utt.move_axis(x=mask, from_index=0, to_index=self.__axes__[0])
-            
-
-
         # Case 2-dimensional
         # Iterate axes
+
+        # Attributes
+        self.__mask__ = tf.Variable(initial_value=mask, trainable=False)
+
+    def call(self, x:tf. Tensor) -> tf.Tensor:
+        raise NotImplementedError()
         
 
 

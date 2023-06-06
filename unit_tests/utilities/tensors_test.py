@@ -2,7 +2,7 @@ import gyoza.utilities.tensors as utt
 import unittest
 import tensorflow as tf
 
-class Test_Tensors_Move_Axis(unittest.TestCase):
+class Test_Move_Axis(unittest.TestCase):
 
     def test_same_axis(self):
         """Test whether the move_axis method manages to move the axis to its current position.

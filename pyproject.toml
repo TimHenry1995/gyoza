@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "gyoza"
-version = "0.0.3"
+version = "0.0.4"
 authors = [
   { name="Tim Dick", email="timdi@icloud.com" },
 ]
@@ -24,7 +24,8 @@ dependencies = [
     "tensorflow >= 2.8.2",
     "matplotlib >= 3.5.3",
     "PyWavelets >= 1.4.1",
-    "sphinx"
+    "sphinx == 5.2.3",
+    "sphinx-rtd-theme"
 ]
 
 [project.urls]

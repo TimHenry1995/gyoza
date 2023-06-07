@@ -12,7 +12,7 @@ class BasicFullyConnectedNet(tf.keras.Model):
     :param int output_channel_count: The number of channels of the final layer.
     :param int depth: The number of layers to be used in between the input and output. If set to 0, there will only be a single 
         layer mapping from input to output. If set to 1, then there will be 1 intermediate layer, etc. 
-    :param bool, optional use_tanh: Indicates whether each layer shall use the hyperbolic rangent activaction function. If set to false, 
+    :param bool, optional use_tanh: Indicates whether each layer shall use the hyperbolic tangent activaction function. If set to False, 
         then a leaky relu is used. Defaults to False.
     :param bool, optional use_batch_normalization: Indicates whether each layer shall use batch normalization or not. Defaults to False."""
 
@@ -33,9 +33,10 @@ class BasicFullyConnectedNet(tf.keras.Model):
         
         # Attributes
         self.sequential = tf.keras.Sequential(layers)
+        """Attribute that refers to the :class:`tensorflow.keras.Sequential` model collecting all layers of self."""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        """Applies the forward operation to x.
+        """Applies the forward operation to ``x``.
         
         :param x: The data tensor that should be passed through the network.
         :type x: :class:`tensorflow.Tensor` 
@@ -51,6 +52,7 @@ class FlowLayer(tf.keras.Model, ABC):
     """Abstract base class for flow layers
     
     References:
+
         - "Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio.
     """
 
@@ -60,37 +62,37 @@ class FlowLayer(tf.keras.Model, ABC):
         :param x: The data to be tranformed. Assumed to be of shape [batch size, ...].
         :type x: :class:`tensorflow.Tensor`
         :return: y_hat (:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
-        """Executes the operation of this layer in the inverse direction.
+        """Executes the operation of this layer in the inverse direction. It is thus the counterpart to :py:meth:`call`.
 
         :param y_hat: The data to be transformed. Assumed to be of shape [batch size, ...].
         :type y_hat: :class:`tensorflow.Tensor`
         :return: x (:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
 
-        raise NotImplemented()
+        raise NotImplementedError()
 
     def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
-        """Computes the logarithmic determinant of this layer's forward operation.
+        """Computes the logarithmic determinant of this layer's :py:meth:`call` operation.
 
         :param x: The data at which the determinant shall be computed. Assumed to be of shape [batch size, ...].
         :type x: :class:`tensorflow.Tensor`
-        :return: logarithmic_determinant (:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point x. Shape == [batch size].
+        :return: logarithmic_determinant (:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
         """        
 
-        raise NotImplemented()
+        raise NotImplementedError()
 
 class Mask(FlowLayer, ABC):
     pass
 
 class CheckerBoardMask(Mask):
-    """A mask that applies a checkerboard pattern to its input. Creates a mask and saves it as non-trainable tf.Variable in 
+    """A mask that applies a checkerboard pattern to its input. Creates a mask and saves it as non-trainable :class:`tensorflow.Variable` in 
         an attribute. The mask is thus deterministic and it enables loading and saving the model.
         
         :param shape: The shape of the checker board pattern, assumed to be of minimal dimensionality at most 2.
             That means, a 2D spatial mask would have shape, e.g. [64, 128], disregarding the fact that 
-            batch and channel axes exist. The mask will be broadcast during use in call.
+            batch and channel axes exist. The mask will be broadcast during use in :py:meth:`call`.
         :type shape: :class:`List[int]`"""
 
     def __init__(self, shape: List[int]) -> None:
@@ -111,15 +113,15 @@ class CheckerBoardMask(Mask):
         # Iterate axes
 
         # Attributes
-        self.__mask__ = tf.Variable(initial_value=mask, trainable=False)
-
+        self.__mask__ = tf.Variable(initial_value=mask, trainable=False) 
+       
     def call(self, x:tf. Tensor) -> tf.Tensor:
         raise NotImplementedError()
         
 class Shuffle(FlowLayer):
     """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen 
-    once during initialization. Thereafter it is saved as a non-trainable tensorflow.Variable in a private attribute.
-    Shuffling is thus deterministic and supports loading and saving.
+    once during initialization. Thereafter it is saved as a non-trainable :class:`tensorflow.Variable` in a private attribute.
+    Shuffling is thus deterministic and supports persistence, e.g. via :py:meth:`tensorflow.keras.Model.load_weights` or :py:meth:`tensorflow.keras.Model.save_weights`.
     
     :param int channel_count: The number of channels that should be shuffled.
     :param int channel_axis: The axis of shuffling."""
@@ -159,27 +161,32 @@ class Shuffle(FlowLayer):
         return 0
 
 class CouplingLayer(FlowLayer, ABC):
-    """This layer splits its input x in the middle into two parts x_1, x_2 along the channel axis. For uneven channel counts one
-    half is one unit larger than the other half. Then the following update rule is applied:\n
-    
-        - y_hat_1 = x_1\n
-        - y_hat_2 = g(x_2, m(x_1))\n
+    """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` first 
+    splits ``x`` into two halves ``x_1``, ``x_2`` along the channel axis. For uneven channel counts, one half is one unit larger 
+    than the other half. The coupling of ``x_2`` (data half) with ``x_1`` (weight half) then relies on the built-in method 
+    :py:meth:`__g__` and externally provided function :py:func:`m` to compute
 
-    where y_hat_1 and y_hat_2 and concatenated along the channel axis to give the overall output y_hat. The function g(a,b) is the 
-    coupling law that has to be invertible with respect to its first argument given the second, e.g. g(a,b) = a + b or g(a,b) = a*b 
-    for b != 0. The function m(a) is unconstrained, e.g. an artificial neural network. The implementation of g(a,b) and m(a) 
-    distinguishes coupling layers. 
-    
-    :param m: The function that shall be used to map the first half of the input to call() to weights used to transform the second 
-            half of that x in g(). Its inputs shall be a tensor with channel axis at channel_axis and channel count equal to 
-            channel_count // 2. Its output shall be a tensor or list of tensors that can be used to transform the second half of x
-            inside g(). The output requirement on m thus depends on the subclass specific implementation for g(). 
+        - ``y_hat_1`` = ``x_1``
+        - ``y_hat_2`` = :py:meth:`__g__` evaluated at ``a`` = ``x_2`` and ``b`` = :py:func:`m` of ``x_1``
+        - ``y_hat`` = concatenate(``y_hat_1``, ``y_hat_2``, channel_axis)
+
+    The method :py:meth:`__g__` is implemented by the specific subclass of :class:`CouplingLayer`. It couples its first 
+    parameter ``a`` (:class:`tensorflow.Tensor`) with its second parameter ``b`` (:class:`tensorflow.Tensor` or 
+    :class:`List[tensorflow.Tensor]`). This coupling is usually a simple transformation such as __g__(a,b) = a + b or 
+    __g__(a,b) = a*b for b != 0. Consequently, :py:meth:`__g__` is trivially invertible and for :py:meth:`invert` and has a trivial 
+    Jacobian determinant needed for :py:meth:`compute_logarithmic_determinant`).
+
+    :param m: The function that shall be used to map ``x_1`` ( first half of ``x`` in :py:meth:`call`) to coupling weights. It 
+        takes a single input ``a`` (:class:`tensorflow.Tensor`) with channel axis at ``channel_axis`` and channel count equal to 
+        ``channel_count`` // 2. Its output shall be a :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensor]`. 
+        Important: The required shape of :py:func:`m` 's output thus depends on the subclass specific implementation for :py:func`__g__`. 
     :type m: :class:`Callable`
-    :param int channel_count: The total number of channels of the input to this layer.
-    :param int channel_axis: The axis along which coupling shall be executed.
+    :param int channel_count: The total number of channels of the input ``x`` to :py:meth:`call`.
+    :param int channel_axis: The axis along which coupling shall be executed in :py:meth:`call`.
 
     
     References:
+
         - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh and David Krueger and Yoshua Bengio.
     """
 
@@ -188,7 +195,9 @@ class CouplingLayer(FlowLayer, ABC):
         # Attributes
         self.__m__ = m
         self.channel_count = channel_count
+        """The total number of channels of the input ``x`` to :py:meth:`call`."""
         self.channel_axis = channel_axis
+        """The axis along which coupling shall be executed in :py:meth:`call`."""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
@@ -209,11 +218,10 @@ class CouplingLayer(FlowLayer, ABC):
     def __g__(self, a: tf.Tensor, b: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function implements an invertible coupling law for inputs ``a`` and ``b``. It is invertible w.r.t. ``a``, given ``b``.
         
-        :param a: Tensor of arbitrary shape whose channel axis is the same as self.channel_axis. This Tensor is supposed to be the
-            second half of x in :meth:`call` and shall be coupled with ``b``.
+        :param a: Tensor of arbitrary shape whose channel axis is the same as :py:attr:`self.channel_axis`. 
         :type a: :class:`tensorflow.Tensor`
-        :param b: Tensor or list of tensors whose shape is the same as that of ``a``. These tensors shall be used to transform ``a``.
-        :type b: :class:`tensorflow.Tensor`, :class:`List[tensorflow.Tensow]`
+        :param b: Constitutes the weights that shall be used to transform ``a``.
+        :type b: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
         
         :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``a``."""
 
@@ -222,10 +230,9 @@ class CouplingLayer(FlowLayer, ABC):
     def __inverse_g__(self, a: tf.Tensor, b: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function implements the inverse coupling law for :meth:`__g__`. 
         
-        :param a: Tensor of arbitrary shape whose channel axis is the same as :py:attr:`self.channel_axis`. This Tensor is supposed to be the
-            second half of x in :py:meth:`call` and in :py:meth:`invert` and it shall be decoupled from ``b``.
+        :param a: Tensor of arbitrary shape whose channel axis is the same as :py:attr:`self.channel_axis`.
         :type a: :class:`tensorflow.Tensor`
-        :param b: Tensor or list of tensors whose shape is the same as that of ``a``. These tensors shall be used to decouple ``a``.
+        :param b: Tensor or list of tensors. These tensors shall be the weights used to decouple ``a``.
         :type b: :class:`tensorflow.Tensor`
         :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``a``."""
 
@@ -246,6 +253,9 @@ class CouplingLayer(FlowLayer, ABC):
 
         # Outputs
         return x
+    
+    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+        raise NotImplementedError()
     
 class AdditiveCouplingLayer(CouplingLayer):
 
@@ -271,31 +281,36 @@ class AdditiveCouplingLayer(CouplingLayer):
         return 0
 
 class ActivationNormalization(FlowLayer):
-    """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance."""
+    """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance.
+    
+    :param channel_count: The number of channels for which the transformation shall be executed.
+    :type channel_count: int
+    :param channel_axis: The axis along which the transformation shall be executed. Each entry along this axis will have 
+        its own transformation applied along all other axis."""
 
     def __init__(self, channel_count: int, channel_axis: int = -1):
-        """Initializer for this class.
-        
-        Inputs:
-        - channel_count: number of channels for which the transform shall be executed.
-        - channel_axis: the axis along which the transform shall be executed. Each entry along this axis will have 
-            its own transformation applied along all other axis."""
 
         # Super
         super().__init__()
         
         # Attributes
         self.__location__ = tf.Variable(tf.zeros(channel_count), trainable=True)
+        """The value by which each data point shall be translated."""
+
         self.__scale__ = tf.Variable(tf.ones(channel_count), trainable=True)
+        """The value by which each data point shall be scaled."""
+
         self.__is_initialized__ = False
+        """An indicator for whether lazy initialization has been executed previously."""
+
         self.__channel_axis__ = channel_axis
+        """The axis along which a data point shall be transformed."""
 
     def __initialize__(self, x: tf.Tensor) -> None:
         """This method shall be used to lazily initialize the variables of self.
         
-        Inputs:
-        - x: data that is propagated through this layer.
-        """
+        :param x: The data that is propagated through :py:meth:`call`.
+        :type x: :class:`tensorflow.Tensor`"""
 
         # Move the channel axis to the end
         new_order = list(range(len(x.shape)))
@@ -314,14 +329,14 @@ class ActivationNormalization(FlowLayer):
         self.__scale__.assign(variance)
 
     def __reshape_variables__(self, x: tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
-        """Formats the variables need for this layer such that they are compatible with the shape of the data passed through the layer.
+        """Formats the variables needed inside :py:meth:`call`, such that they are compatible with the shape of the data ``x``.
         
-        Inputs:
-        - x: the data to be passed through the layer. It's shape must have as many channels along the channel axis as specified during initialization.
+        :param x: The data to be passed through the :py:meth:`call`. It must have as many channels along the channel axis as specified 
+            during initialization.
         
-        Outputs:
-        - location: the reshaped location attribute of self.
-        - scale: the reshaped scale attribute of self. """
+        :return: 
+            - location (:class:`tensorflow.Variable`) - The reshaped :py:attr:`__location__` attribute of self.
+            - scale (:class:`tensorflow.Variable`) - The reshaped :py:attr:`__scale__` attribute of self. """
 
         # Cast variables to shape compatible with x
         new_shape = [1] * len(x.shape); new_shape[self.__channel_axis__] = len(self.__location__)
@@ -332,7 +347,8 @@ class ActivationNormalization(FlowLayer):
         return location, scale
 
     def __scale_to_non_zero__(self) -> None:
-        """Corrects the scale attribute where it is equal to zero by adding a constant epsilon. This is useful to prevent scaling by 0 which is not invertible."""
+        """Mutating method that corrects the :py:attr:`__scale__` attribute where it is equal to zero by adding a constant epsilon. 
+        This is useful to prevent scaling by 0 which is not invertible."""
         
         # Correct scale where it is equal to zero to prevent division by zero
         epsilon = tf.stop_gradient(tf.constant(1e-6 * (self.__scale__.numpy() == 0), dtype=self.__scale__.dtype)) 
@@ -341,11 +357,11 @@ class ActivationNormalization(FlowLayer):
     def __prepare_variables_for_computation__(self, x:tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
         """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
         
-        Inputs:
-        - x: example data. It's shape must agree with expectation of self.__reshape_variables__.
+        :param x: Data to be passed through :py:meth:`call`. It's shape must agree with input ``x`` of :py:meth:`self.__reshape_variables__`.
 
-        Outputs:
-        - location, scale: the prepared location and scale attributes."""
+        :return: 
+            - location (tensorflow.Variable) - The :py:attr:`__location__` attribute shaped to fit ``x``. 
+            - scale (tensorflow.Variable) - The :py:attr:`__scale__` attribute ensured to be non-zero and shaped to fit ``x``."""
 
         # Preparations
         self.__scale_to_non_zero__()
@@ -390,7 +406,7 @@ class ActivationNormalization(FlowLayer):
         return logarithmic_determinant
 
 class SequentialFlowNetwork(FlowLayer):
-    """Manages flow through layers with forward and inverse support."""
+    """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way."""
 
     def __init__(self, layers: List[FlowLayer]):
         
@@ -428,6 +444,7 @@ class SequentialFlowNetwork(FlowLayer):
             
         # Outputs
         return logarithmic_determinant
+
 '''
 class VectorTransformer(nn.Module):
     def __init__(self, config):

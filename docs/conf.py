@@ -11,7 +11,7 @@ autodoc_default_options = {
 # https://www.sphinx-doc.org/en/master/usage/configuration.html
 
 import os, sys
-for x in os.walk('./src'):
+for x in os.walk('.'):
   sys.path.insert(0, x[0])
 
 # -- Project information -----------------------------------------------------

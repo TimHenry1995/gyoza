@@ -4,10 +4,26 @@ gyoza.modelling package
 Submodules
 ----------
 
-gyoza.modelling.modules module
-------------------------------
+gyoza.modelling.flow\_layers module
+-----------------------------------
 
-.. automodule:: gyoza.modelling.modules
+.. automodule:: gyoza.modelling.flow_layers
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+gyoza.modelling.losses module
+-----------------------------
+
+.. automodule:: gyoza.modelling.losses
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
+gyoza.modelling.standard\_layers module
+---------------------------------------
+
+.. automodule:: gyoza.modelling.standard_layers
    :members:
    :undoc-members:
    :show-inheritance:

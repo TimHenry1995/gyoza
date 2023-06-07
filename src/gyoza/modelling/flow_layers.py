@@ -4,50 +4,6 @@ from typing import Any, Tuple, List, Callable
 from abc import ABC
 from gyoza.utilities import tensors as utt
 
-class BasicFullyConnectedNet(tf.keras.Model):
-    """This class provides a basic fully connected network. It essentially passes data through several
-    :class:`tensorflow.keras.layers.Dense` layers and applies optional batch normalization. 
-    
-    :param int latent_channel_count: The number of channels maintained between intermediate layers. 
-    :param int output_channel_count: The number of channels of the final layer.
-    :param int depth: The number of layers to be used in between the input and output. If set to 0, there will only be a single 
-        layer mapping from input to output. If set to 1, then there will be 1 intermediate layer, etc. 
-    :param bool, optional use_tanh: Indicates whether each layer shall use the hyperbolic tangent activaction function. If set to False, 
-        then a leaky relu is used. Defaults to False.
-    :param bool, optional use_batch_normalization: Indicates whether each layer shall use batch normalization or not. Defaults to False."""
-
-    def __init__(self, latent_channel_count:int, output_channel_count:int, depth: int, use_tanh:bool=False, use_batch_normalization:bool=False):
-        
-        # Super
-        super(BasicFullyConnectedNet, self).__init__()
-        
-        # Compile list of layers
-        channel_counts = [latent_channel_count] * depth + [output_channel_count]
-        layers = []
-        for d in range(depth + 1):
-            layers.append(tf.keras.layers.Dense(units=channel_counts[d]))
-            if use_batch_normalization: layers.append(tf.keras.layers.BatchNormalization(channel_counts[d]), axis=-1)
-            if d < depth or not use_tanh: layers.append(tf.keras.layers.LeakyReLU())
-        
-        if use_tanh: layers.append(tf.keras.layers.Tanh())
-        
-        # Attributes
-        self.sequential = tf.keras.Sequential(layers)
-        """Attribute that refers to the :class:`tensorflow.keras.Sequential` model collecting all layers of self."""
-
-    def call(self, x: tf.Tensor) -> tf.Tensor:
-        """Applies the forward operation to ``x``.
-        
-        :param x: The data tensor that should be passed through the network.
-        :type x: :class:`tensorflow.Tensor` 
-        :return: y_hat (:class:`tensorflow.Tensor`) - The prediction."""
-        
-        # Predict
-        y_hat = self.sequential(x)
-
-        # Outputs:
-        return y_hat
-
 class FlowLayer(tf.keras.Model, ABC):
     """Abstract base class for flow layers
     
@@ -87,33 +43,28 @@ class Mask(FlowLayer, ABC):
     pass
 
 class CheckerBoardMask(Mask):
-    """A mask that applies a checkerboard pattern to its input. Creates a mask and saves it as non-trainable :class:`tensorflow.Variable` in 
-        an attribute. The mask is thus deterministic and it enables loading and saving the model.
+    """A mask that applies a checkerboard pattern to its input. Creates a mask and saves it as non-trainable :class:`tensorflow.Variable` 
+    in an attribute. The mask is thus deterministic and it enables loading and saving the model.
         
-        :param shape: The shape of the checker board pattern, assumed to be of minimal dimensionality at most 2.
-            That means, a 2D spatial mask would have shape, e.g. [64, 128], disregarding the fact that 
-            batch and channel axes exist. The mask will be broadcast during use in :py:meth:`call`.
-        :type shape: :class:`List[int]`"""
+    :param axes: The axes along which the checker board pattern shall be applied. The must be at most 2 axes specified.
+    :type shape: :class:`List[int]`"""
 
-    def __init__(self, shape: List[int]) -> None:
+    def __init__(self, axes: List[int], shape: List[int]) -> None:
 
         # Input validity
-        assert len(shape) <= 2, "There must be at most two axes along which the checker board pattern shall be applied."
-
-        # Initialize
-        mask = np.zeros(shape=shape)
-
-        # Case 1-dimensional
-        if len(shape) == 1:
-
-            # Set ones
-            mask[::2,...] = 1
-
-        # Case 2-dimensional
-        # Iterate axes
+        assert len(axes) <= 2, "There must be at most two axes along which the checker board pattern shall be applied."
 
         # Attributes
+        self.axes = axes
+        """The axes along which the checker board pattern shall be applied. The must be at most 2 axes specified."""
+
+        mask = np.ones(shape)
+        if len(shape) == 1: mask[::2] = 0
+        else: 
+            mask[1::2,1::2] = 0
+            mask[::2,::2] = 0
         self.__mask__ = tf.Variable(initial_value=mask, trainable=False) 
+        """The mask to be applied to data in :py:meth:`call`."""
        
     def call(self, x:tf. Tensor) -> tf.Tensor:
         raise NotImplementedError()
@@ -328,24 +279,6 @@ class ActivationNormalization(FlowLayer):
         self.__location__.assign(mean)
         self.__scale__.assign(variance)
 
-    def __reshape_variables__(self, x: tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
-        """Formats the variables needed inside :py:meth:`call`, such that they are compatible with the shape of the data ``x``.
-        
-        :param x: The data to be passed through the :py:meth:`call`. It must have as many channels along the channel axis as specified 
-            during initialization.
-        
-        :return: 
-            - location (:class:`tensorflow.Variable`) - The reshaped :py:attr:`__location__` attribute of self.
-            - scale (:class:`tensorflow.Variable`) - The reshaped :py:attr:`__scale__` attribute of self. """
-
-        # Cast variables to shape compatible with x
-        new_shape = [1] * len(x.shape); new_shape[self.__channel_axis__] = len(self.__location__)
-        location = tf.reshape(self.__location__, new_shape) # Shape has ones along every axis except for the channel axis where it is equal to channel count.
-        scale = tf.reshape(self.__scale__, new_shape) # Shape equal that of location 
-        
-        # Outputs
-        return location, scale
-
     def __scale_to_non_zero__(self) -> None:
         """Mutating method that corrects the :py:attr:`__scale__` attribute where it is equal to zero by adding a constant epsilon. 
         This is useful to prevent scaling by 0 which is not invertible."""
@@ -444,55 +377,6 @@ class SequentialFlowNetwork(FlowLayer):
             
         # Outputs
         return logarithmic_determinant
-
-'''
-class VectorTransformer(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        import torch.backends.cudnn as cudnn
-        cudnn.benchmark = True
-        self.config = config
-
-        self.in_channel = retrieve(config, "Transformer/in_channel")
-        self.n_flow = retrieve(config, "Transformer/n_flow")
-        self.depth_submodules = retrieve(config, "Transformer/hidden_depth")
-        self.hidden_dim = retrieve(config, "Transformer/hidden_dim")
-        modules = [ActivationNormalization, DoubleVectorCouplingBlock, Shuffle]
-        self.realnvp = EfficientVRNVP(modules, self.in_channel, self.n_flow, self.hidden_dim,
-                                   hidden_depth=self.depth_submodules)
-
-    def forward(self, input, reverse=False):
-        if reverse:
-            return self.reverse(input)
-        input = input.squeeze()
-        out, logdet = self.realnvp(input)
-        return out[:, :, None, None], logdet
-
-    def reverse(self, out):
-        out = out.squeeze()
-        return self.realnvp(out, reverse=True)[0][:, :, None, None]
-
-class FactorTransformer(VectorTransformer):
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.n_factors = retrieve(config, "Transformer/n_factors", default=2)
-        self.factor_config = retrieve(config, "Transformer/factor_config", default=list())
-
-    def forward(self, input):
-        out, logdet = super().forward(input)
-        if self.factor_config:
-            out = torch.split(out, self.factor_config, dim=1)
-        else:
-            out = torch.chunk(out, self.n_factors, dim=1)
-        return out, logdet
-
-    def reverse(self, out):
-        out = torch.cat(out, dim=1)
-        return super().reverse(out)
-'''
-
-
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt

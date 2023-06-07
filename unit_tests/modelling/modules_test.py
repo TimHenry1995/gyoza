@@ -1,4 +1,4 @@
-import gyoza.modelling.modules as mms
+import gyoza.modelling.flow_layers as mms
 import unittest
 import tensorflow as tf
 
@@ -8,7 +8,7 @@ class Test_Checker_Board_Mask(unittest.TestCase):
         """Tests whether the call method can create a checker board mask at axis 2."""
 
         # Initialize
-        x = 
+        x = 4
 
 
 

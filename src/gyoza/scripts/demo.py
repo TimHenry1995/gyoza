@@ -1,6 +1,6 @@
 import os, numpy as np, librosa
 import matplotlib.pyplot as plt
-import pywt
+#import pywt
 from gyoza.utilities import file_management as fm
 
 if __name__ == "__main__":
@@ -15,8 +15,8 @@ if __name__ == "__main__":
 
 
     level = 10
-    coeffs = pywt.wavedec(y, 'db6', level=level)
-    y_hat = pywt.waverec(coeffs, 'db6')
+    #coeffs = pywt.wavedec(y, 'db6', level=level)
+    #y_hat = pywt.waverec(coeffs, 'db6')
     
     plt.figure()
     plt.plot(y)
@@ -26,7 +26,7 @@ if __name__ == "__main__":
     plt.subplots(nrows=level+1)
     for l in range(level):
         plt.subplot(level, 1, level-l)
-        plt.imshow(coeffs[l][np.newaxis,:], aspect='auto')
+        #plt.imshow(coeffs[l][np.newaxis,:], aspect='auto')
         plt.axis('off')
 
     

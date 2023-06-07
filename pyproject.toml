@@ -23,7 +23,7 @@ dependencies = [
     "librosa >= 0.10.0.post2",
     "tensorflow >= 2.8.2",
     "matplotlib >= 3.5.3",
-    "PyWavelets >= 1.4.1",
+    "PyWavelets >= 1.4.0",
     "sphinx == 5.2.3",
     "sphinx-rtd-theme"
 ]

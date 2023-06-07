@@ -1,13 +1,20 @@
 Documentation
 ensure requirements.txt contains all new libraries
-sphinx-apidoc -o docs src/gyoza
-update the index.rst by writing the following at the top of the file
+from within project directory call sphinx-apidoc -o docs src/gyoza
+update the conf.py by writing the following at the top of the file
 import os, sys
-for x in os.walk('./src'):
+for x in os.walk('.'):
   sys.path.insert(0, x[0])
-update version in conf.py of docs
-ensure conf.py has theme 'sphinx_rtd_theme', ensure extennsions = ['sphinx.ext.todo','sphinx.ext.viewcode','sphinx.ext.autodoc']
-and in conf.py point the directory to the one containing the docs folder, e.g. import os, sys; sys.path.append(os.path.abspath(".."))
+
+for x in os.walk('..'):
+  sys.path.insert(0, x[0])
+
+for x in os.walk(os.path.join("..","..")):
+  sys.path.insert(0, x[0])
+
+update the version in conf.py of docs
+ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.todo','sphinx.ext.viewcode','sphinx.ext.autodoc']
+
 cd to docs directory, run make html
 
 Uploading to pypi

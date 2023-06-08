@@ -1,5 +1,6 @@
 Documentation
 ensure requirements.txt contains all new libraries
+inside docs directory delete all files that are created by the command sphinx-apidoc -o docs src/gyoza to make sure they will be overidden next
 from within project directory call sphinx-apidoc -o docs src/gyoza
 update the conf.py by writing the following at the top of the file
 import os, sys

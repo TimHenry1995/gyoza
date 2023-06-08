@@ -83,28 +83,21 @@ class Shuffle(FlowLayer):
 
 class CouplingLayer(FlowLayer, ABC):
     """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
-    splits ``x`` into two halves ``x_1``, ``x_2`` using a binary mask.
-    The coupling of ``x_2`` (data half) with ``x_1`` 
-    (weight half) then relies on the built-in method :py:meth:`__couple__` and externally provided function 
-    :py:func:`compute_weights` to compute
+    obtains two copies of x, referred to as x_1, x_2 using a binary mask and its negative (1-mask), respectively. The half x_1 
+    is mapped to coupling parameters via a user-provided model, called :py:meth:``compute_coupling_parameters``. This can be e.g. an 
+    artificial neural network. Next, :py:meth:`call` uses the internally defined :py:meth:`__couple__` method to couple x_2 with 
+    those parameters. This coupling is designed to be trivially invertible, given the parameters. It can be for instance y_hat = 
+    x + parameters, which has the trivial inverse x = y_hat - parameters. Due to the splitting of x and the fact that 
+    :py:func:`compute_coupling_parameters` will only be evaluated in the forward direction, the overall :py:meth:`call` 
+    method will be trivially invertible. Similarly, its Jacobian determinant remains trivial and thus tractable.
 
-        - ``weights`` = :py:func:`compute_weights` , where a = ``mask`` * ``x``
-        - ``y_hat`` = ``mask`` * ``x`` + (1- ``mask`` ) * :py:meth:`__couple__` , where a = ``x`` , b = ``weights``
-        
-    The method :py:meth:`__couple__` is implemented by the specific subclass of :class:`CouplingLayer`. It couples its first 
-    parameter ``a`` (:class:`tensorflow.Tensor`) with its second parameter ``b`` (:class:`tensorflow.Tensor` or 
-    :class:`List[tensorflow.Tensor]`). This coupling is usually a simple transformation such as __g__(a,b) = a + b or 
-    __g__(a,b) = a*b for b != 0. Consequently, :py:meth:`__g__` is trivially invertible and for :py:meth:`invert` and has a trivial 
-    Jacobian determinant needed for :py:meth:`compute_logarithmic_determinant`).
-
-    :param m: The function that shall be used to map ``x_1`` ( first half of ``x`` in :py:meth:`call`) to coupling weights. It 
-        takes a single input ``a`` (:class:`tensorflow.Tensor`) with channel axis at ``channel_axis`` and channel count equal to 
-        ``channel_count`` // 2. Its output shall be a :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensor]`. 
-        Important: The required shape of :py:func:`m` 's output thus depends on the subclass specific implementation for :py:func`__g__`. 
-    :type m: :class:`Callable`
-    :param int channel_count: The total number of channels of the input ``x`` to :py:meth:`call`.
-    :param int channel_axis: The axis along which coupling shall be executed in :py:meth:`call`.
-
+    :param compute_coupling_parameters: The function that shall be used to compute parameters. See the placeholder member
+        :py:meth:`compute_coupling_parameters` for a detailed description of requirements.
+    :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
+    :param mask: The mask used to select one half of the data while discarding the other half.
+    :type mask: :class:`tensorflow.Tensor`
+    :param axes: The axis along which the couplin shall be executed. Assumed to be consecutive.
+    :type axes: :class:`List[int]`
     
     References:
 
@@ -112,96 +105,218 @@ class CouplingLayer(FlowLayer, ABC):
         - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, compute_weights: Callable, flatten: Callable, channel_count: int, channel_axis: int = -1):
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
 
+        # Input validity
+        assert len(mask.shape) == len(axes.shape), f"The mask ({len(mask.shape)} axes) should have as many axes as the axes parameter ({len(axes.shape)})"
+        for a in range(len(axes)-1):
+            assert axes[a] == axes[a+1], f"The axes ({axes}) have to be consecutive."
+        
         # Attributes
-        self.compute_weights = compute_weights
-        self.flatten = flatten
-        self.channel_count = channel_count
-        """The total number of channels of the input ``x`` to :py:meth:`call`."""
-        self.channel_axis = channel_axis
-        """The axis along which coupling shall be executed in :py:meth:`call`."""
+        self.compute_coupling_parameters = compute_coupling_parameters
+        
+        self.__mask__ = mask
+        """(:class:`tensorflow.Variable`) - The mask used to select one half of the data while discarding the other half."""
+
+        self.__axes__ = axes
+        """(:class:`List[int]`) - The axes along which the selection shall be applied."""
+
+        # Super
+        super(CouplingLayer, self).__init__()
+
+
+    @staticmethod
+    def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
+        """Determines whether the parameters are valid for coupling.
+       
+        :param parameters: The parameters to be checked.
+        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensor]`
+        """
+
+        # Assertion
+        assert type(parameters) == tf.Tensor, f"For this coupling layer parameters is assumed to be of type tensorflow.Tensor, not {type(parameters)}"
+    
+    def compute_coupling_parameters(self, x: tf.Tensor) -> tf.Tensor:
+        """A callable, e.g. a :class:`tensorflow.keras.Model` object that maps ``x`` to coupling parameters used to couple 
+        ``x`` with itself. The model may be arbitrarily complicated and does not have to be invertible.
+        
+        :param x: The data to be transformed. Shape has to allow for masking at :py:attr:`self.__axes__` via :py:attr:`self.__mask__`.
+        :type x: :class:`tensorflow.Tensor`
+        :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product with ``x``."""
+        
+        raise NotImplementedError()
+
+    def __apply_mask__(self, x: tf.Tensor, mask: tf.Variable) -> tf.Tensor:
+        """Applies the ``mask`` to ``x``.
+
+        :param x: The data to be masked. Shape has to allow for masking at :py:attr:`self.__axes__` via :py:attr:`self.__mask__`.
+        :type x: :class:`tensorflow.Tensor`
+        :param mask: The mask to be applied. Its shape can be minimal as it will be broadcasted to fit x.
+        :type mask: :class:`tensorflow.Variable`
+        :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
+        """
+
+        # Reshape mask to fit x
+        axes = list(range(len(x.shape)))
+        for axis in self.__axes__: axes.remove(axis) 
+        mask = utt.expand_axes(x=mask, axes=axes)
+
+        # Mask
+        x_masked = x*mask
+
+        # Outputs
+        return x_masked
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-        
-        # Split
-        partition_point = self.channel_count // 2
-        x_1, x_2 = tf.split(x, num_or_size_splits=[partition_point, self.channel_count - partition_point], axis=self.channel_axis)
-         
+
+        # Split x
+        x_1 = self.__apply_mask__(x=x, mask=self.__mask__)
+
+        # Compute parameters
+        coupling_parameters = self.compute_coupling_parameters(x_1)
+        self.__assert_parameter_validity__(parameters=coupling_parameters)
+
         # Couple
         y_hat_1 = x_1
-        y_hat_2 = self.__g__(a=x_2, b=self.compute_weights(a=x_1))
+        y_hat_2 = self.__apply_mask__(x=self.__couple__(x=x, parameters=coupling_parameters), mask=1-self.__mask__)
 
-        # Concatenate
-        y_hat = tf.concat([y_hat_1, y_hat_2], axis=self.channel_axis)
+        # Combine
+        y_hat = y_hat_1 + y_hat_2
 
         # Outputs
         return y_hat
     
-    def __g__(self, a: tf.Tensor, b: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
-        """This function implements an invertible coupling law for inputs ``a`` and ``b``. It is invertible w.r.t. ``a``, given ``b``.
+    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+        """This function implements an invertible coupling for inputs ``x`` and ``parameters``.
         
-        :param a: Tensor of arbitrary shape whose channel axis is the same as :py:attr:`self.channel_axis`. 
-        :type a: :class:`tensorflow.Tensor`
-        :param b: Constitutes the weights that shall be used to transform ``a``.
-        :type b: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
-        
-        :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``a``."""
+        :param x: The data to be transformed.  
+        :type x: :class:`tensorflow.Tensor`
+        :param parameters: Constitutes the parameters that shall be used to transform ``x``. It is assumed to be scalar or have the 
+            same shape as ``x`` or be scalar.
+        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
+        :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``x``."""
 
         raise NotImplementedError()
     
-    def __inverse_g__(self, a: tf.Tensor, b: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
-        """This function implements the inverse coupling law for :meth:`__g__`. 
+    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+        """This function is the inverse of :py:meth:`__couple__`.
         
-        :param a: Tensor of arbitrary shape whose channel axis is the same as :py:attr:`self.channel_axis`.
-        :type a: :class:`tensorflow.Tensor`
-        :param b: Tensor or list of tensors. These tensors shall be the weights used to decouple ``a``.
-        :type b: :class:`tensorflow.Tensor`
-        :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``a``."""
+        :param y_hat: The data to be transformed.  
+        :type y_hat: :class:`tensorflow.Tensor`
+        :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It is assumed to be scalar or have the 
+            same shape as ``y_hat`` or be scalar.
+        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
+        :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``y_hat``."""
 
         raise NotImplementedError()
     
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Split
-        partition_point = self.channel_count // 2
-        y_hat_1, y_hat_2 = tf.split(y_hat, num_or_size_splits=[partition_point, self.channel_count - partition_point], axis=self.channel_axis)
-         
+        y_hat_1 = self.__apply_mask__(x=y_hat, mask=self.__mask__)
+
+        # Compute parameters
+        coupling_parameters = self.compute_coupling_parameters(y_hat_1)
+        assert self.__assert_parameter_validity__(parameters=coupling_parameters), f"Parameters do not have valid type. Check the specification of your chosen coupling layer for details."
+
         # Decouple
         x_1 = y_hat_1
-        x_2 = self.__inverse_g__(a=y_hat_2, b=self.compute_weights(a=y_hat_1))
+        x_2 = self.__apply_mask__(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), mask=1-self.__mask__)
 
-        # Concatenate
-        x = tf.concat([x_1, x_2], axis=self.channel_axis)
+        # Combine
+        x = x_1 + x_2
+
+        # Outputs
+        return x
+    
+class AdditiveCouplingLayer(CouplingLayer):
+    """This couplign layer implements an additive coupling of the form y = x + parameters"""
+
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
+        
+        # Super
+        super(AdditiveCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask, axes=axes)
+
+    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+        
+        # Couple
+        y_hat = x + parameters
+
+        # Outputs
+        return y_hat
+    
+    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+        
+        # Decouple
+        x = y_hat - parameters
 
         # Outputs
         return x
     
     def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
-        raise NotImplementedError()
-    
-class AdditiveCouplingLayer(CouplingLayer):
-
-    def __g__(self, a: tf.Tensor, b: tf.Tensor) -> tf.Tensor:
-        
-        # Couple
-        y_hat = a + b
-
-        # Outputs
-        return y_hat
-    
-    def __inverse_g__(self, a: tf.Tensor, b: tf.Tensor) -> tf.Tensor:
-        
-        # Decouple
-        y_hat = a - b
-
-        # Outputs
-        return y_hat
-    
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Outputs
         return 0
+
+class AffineCouplingLayer(CouplingLayer):
+    """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
+    and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
+
+    
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
+        
+        # Super
+        super(AffineCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask, axes=axes)
+
+    @staticmethod
+    def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
+
+        # Assert
+        is_valid = type(parameters) == type([]) and len(parameters) == 2
+        is_valid = is_valid and type(parameters[0]) == tf.Tensor and type(parameters[1]) == tf.Tensor
+                                                                          
+        assert is_valid, f"For this coupling layer parameters is assumed to be of type List[tensorflow.Tensor], not {type(parameters)}."
+    
+    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+        
+        # Unpack
+        scale = tf.exp(parameters[0])
+        location = parameters[1]
+
+        # Couple
+        y_hat = scale * x + location
+
+        # Outputs
+        return y_hat
+    
+    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+        
+        # Unpack
+        scale = tf.exp(parameters[0])
+        location = parameters[1]
+
+        # Decouple
+        x = (y_hat - location) / scale
+
+        # Outputs
+        return x
+    
+    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+        
+        # Split x
+        x_1 = self.__apply_mask__(x=x, mask=self.__mask__)
+
+        # Compute parameters
+        coupling_parameters = self.compute_coupling_parameters(x_1)
+
+        # Determinant
+        logarithmic_scale = coupling_parameters[0]
+        logarithmic_determinant = 0
+        for axis in self.__axes__:
+            logarithmic_determinant += tf.reduce_sum(logarithmic_scale, axis=axis)
+
+        # Outputs
+        return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
     """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance.

@@ -2,7 +2,7 @@ import gyoza.utilities.tensors as utt
 import unittest
 import tensorflow as tf
 
-class Test_Move_Axis(unittest.TestCase):
+class TestMoveAxis(unittest.TestCase):
 
     def test_same_axis(self):
         """Test whether the move_axis function manages to move the axis to its current position.
@@ -50,7 +50,7 @@ class Test_Move_Axis(unittest.TestCase):
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
 
-class Test_Expand_Axes(unittest.TestCase):
+class TestExpandAxes(unittest.TestCase):
 
     def test_axes_0(self):
         """Test whether the expand_axes function manages to expand along one axis"""

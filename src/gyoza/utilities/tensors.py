@@ -26,10 +26,10 @@ def expand_axes(x: tf.Tensor, axes) -> tf.Tensor:
     
     :param x: The tensor to be expanded.
     :type x: :class:`tensorflow.Tensor`
-    :param axes: The axes along which to expand. Their indices are assumed to be valid in the output shape. They must not 
-        introduce gaps in the output shape. This means if, e.g. x has two axes then ``axes`` may be, e.g. [0,1,3,5,6,7] where
-        axes 2 and 4 are filled in orde by x but ``axes`` must not be, e.g. [0,1,3,5,6,10] because of the gap between 6 and 10 
-        that would be introduced in the output shape.
+    :param axes: The axes along which to expand. Their indices are assumed to be valid in the shape of ``x_new``. This means if, 
+        e.g. ``x`` has two axes then ``axes`` may be, e.g. [0,1,3,5,6,7] where axes 2 and 4 are filled in order by ``x`` but 
+        ``axes`` must not be, e.g. [0,1,3,5,6,10] because of the gap between 6 and 10 that would be introduced in the shape of
+        ``x_new``.
     :type axes: :class:`List[tensorflow.Tensor]`
     
     :return: x_new (:class:`tensorflow.Tensor`) - The reshaped version of x with singletons along ''axes''."""

@@ -20,6 +20,14 @@ gyoza.modelling.losses module
    :undoc-members:
    :show-inheritance:
 
+gyoza.modelling.semi\_selectors module
+--------------------------------------
+
+.. automodule:: gyoza.modelling.semi_selectors
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 gyoza.modelling.standard\_layers module
 ---------------------------------------
 

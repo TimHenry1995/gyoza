@@ -39,36 +39,6 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
-class Mask(FlowLayer, ABC):
-    pass
-
-class CheckerBoardMask(Mask):
-    """A mask that applies a checkerboard pattern to its input. Creates a mask and saves it as non-trainable :class:`tensorflow.Variable` 
-    in an attribute. The mask is thus deterministic and it enables loading and saving the model.
-        
-    :param axes: The axes along which the checker board pattern shall be applied. The must be at most 2 axes specified.
-    :type shape: :class:`List[int]`"""
-
-    def __init__(self, axes: List[int], shape: List[int]) -> None:
-
-        # Input validity
-        assert len(axes) <= 2, "There must be at most two axes along which the checker board pattern shall be applied."
-
-        # Attributes
-        self.axes = axes
-        """The axes along which the checker board pattern shall be applied. The must be at most 2 axes specified."""
-
-        mask = np.ones(shape)
-        if len(shape) == 1: mask[::2] = 0
-        else: 
-            mask[1::2,1::2] = 0
-            mask[::2,::2] = 0
-        self.__mask__ = tf.Variable(initial_value=mask, trainable=False) 
-        """The mask to be applied to data in :py:meth:`call`."""
-       
-    def call(self, x:tf. Tensor) -> tf.Tensor:
-        raise NotImplementedError()
-        
 class Shuffle(FlowLayer):
     """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen 
     once during initialization. Thereafter it is saved as a non-trainable :class:`tensorflow.Variable` in a private attribute.
@@ -112,16 +82,16 @@ class Shuffle(FlowLayer):
         return 0
 
 class CouplingLayer(FlowLayer, ABC):
-    """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` first 
-    splits ``x`` into two halves ``x_1``, ``x_2`` along the channel axis. For uneven channel counts, one half is one unit larger 
-    than the other half. The coupling of ``x_2`` (data half) with ``x_1`` (weight half) then relies on the built-in method 
-    :py:meth:`__g__` and externally provided function :py:func:`m` to compute
+    """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
+    splits ``x`` into two halves ``x_1``, ``x_2`` using a binary mask.
+    The coupling of ``x_2`` (data half) with ``x_1`` 
+    (weight half) then relies on the built-in method :py:meth:`__couple__` and externally provided function 
+    :py:func:`compute_weights` to compute
 
-        - ``y_hat_1`` = ``x_1``
-        - ``y_hat_2`` = :py:meth:`__g__` evaluated at ``a`` = ``x_2`` and ``b`` = :py:func:`m` of ``x_1``
-        - ``y_hat`` = concatenate(``y_hat_1``, ``y_hat_2``, channel_axis)
-
-    The method :py:meth:`__g__` is implemented by the specific subclass of :class:`CouplingLayer`. It couples its first 
+        - ``weights`` = :py:func:`compute_weights` , where a = ``mask`` * ``x``
+        - ``y_hat`` = ``mask`` * ``x`` + (1- ``mask`` ) * :py:meth:`__couple__` , where a = ``x`` , b = ``weights``
+        
+    The method :py:meth:`__couple__` is implemented by the specific subclass of :class:`CouplingLayer`. It couples its first 
     parameter ``a`` (:class:`tensorflow.Tensor`) with its second parameter ``b`` (:class:`tensorflow.Tensor` or 
     :class:`List[tensorflow.Tensor]`). This coupling is usually a simple transformation such as __g__(a,b) = a + b or 
     __g__(a,b) = a*b for b != 0. Consequently, :py:meth:`__g__` is trivially invertible and for :py:meth:`invert` and has a trivial 
@@ -139,12 +109,14 @@ class CouplingLayer(FlowLayer, ABC):
     References:
 
         - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh and David Krueger and Yoshua Bengio.
+        - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, m: Callable, channel_count: int, channel_axis: int = -1):
+    def __init__(self, compute_weights: Callable, flatten: Callable, channel_count: int, channel_axis: int = -1):
 
         # Attributes
-        self.__m__ = m
+        self.compute_weights = compute_weights
+        self.flatten = flatten
         self.channel_count = channel_count
         """The total number of channels of the input ``x`` to :py:meth:`call`."""
         self.channel_axis = channel_axis
@@ -158,7 +130,7 @@ class CouplingLayer(FlowLayer, ABC):
          
         # Couple
         y_hat_1 = x_1
-        y_hat_2 = self.__g__(a=x_2, b=self.__m__(a=x_1))
+        y_hat_2 = self.__g__(a=x_2, b=self.compute_weights(a=x_1))
 
         # Concatenate
         y_hat = tf.concat([y_hat_1, y_hat_2], axis=self.channel_axis)
@@ -197,7 +169,7 @@ class CouplingLayer(FlowLayer, ABC):
          
         # Decouple
         x_1 = y_hat_1
-        x_2 = self.__inverse_g__(a=y_hat_2, b=self.__m__(a=y_hat_1))
+        x_2 = self.__inverse_g__(a=y_hat_2, b=self.compute_weights(a=y_hat_1))
 
         # Concatenate
         x = tf.concat([x_1, x_2], axis=self.channel_axis)
@@ -298,7 +270,9 @@ class ActivationNormalization(FlowLayer):
 
         # Preparations
         self.__scale_to_non_zero__()
-        location, scale = self.__reshape_variables__(x=x)
+        axes = list(range(len(x.shape))); axes.remove(self.__channel_axis__)
+        location = utt.expand_axes(x=self.__location__, axes=axes)
+        scale = utt.expand_axes(x=self.__scale__, axes=axes)
 
         # Outputs
         return location, scale

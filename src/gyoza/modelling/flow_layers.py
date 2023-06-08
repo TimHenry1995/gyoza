@@ -108,22 +108,21 @@ class CouplingLayer(FlowLayer, ABC):
     def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
 
         # Input validity
-        assert len(mask.shape) == len(axes.shape), f"The mask ({len(mask.shape)} axes) should have as many axes as the axes parameter ({len(axes.shape)})"
+        assert len(mask.shape) == len(axes), f"The mask ({len(mask.shape)} axes) should have as many axes as the axes parameter ({len(axes)})"
         for a in range(len(axes)-1):
-            assert axes[a] == axes[a+1], f"The axes ({axes}) have to be consecutive."
+            assert axes[a]+1 == axes[a+1], f"The axes ({axes}) have to be consecutive."
         
+        # Super
+        super(CouplingLayer, self).__init__()
+
         # Attributes
         self.compute_coupling_parameters = compute_coupling_parameters
         
-        self.__mask__ = mask
+        self.__mask__ = tf.cast(mask, dtype=tf.float32)
         """(:class:`tensorflow.Variable`) - The mask used to select one half of the data while discarding the other half."""
 
         self.__axes__ = axes
         """(:class:`List[int]`) - The axes along which the selection shall be applied."""
-
-        # Super
-        super(CouplingLayer, self).__init__()
-
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -134,7 +133,7 @@ class CouplingLayer(FlowLayer, ABC):
         """
 
         # Assertion
-        assert type(parameters) == tf.Tensor, f"For this coupling layer parameters is assumed to be of type tensorflow.Tensor, not {type(parameters)}"
+        assert isinstance(parameters, tf.Tensor), f"For this coupling layer parameters is assumed to be of type tensorflow.Tensor, not {type(parameters)}"
     
     def compute_coupling_parameters(self, x: tf.Tensor) -> tf.Tensor:
         """A callable, e.g. a :class:`tensorflow.keras.Model` object that maps ``x`` to coupling parameters used to couple 

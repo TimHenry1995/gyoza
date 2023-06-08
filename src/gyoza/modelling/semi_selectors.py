@@ -1,7 +1,7 @@
-import tensorflow as tf
+import tensorflow as tf, numpy as np
+import gyoza.utilities.tensors as utt
 from abc import ABC
 from typing import List
-
 
 class SemiSelector(tf.keras.Model, ABC):
     """This class can be used to curate elements of a tensor x. As suggested by the name semi, half of x is selected
@@ -32,18 +32,34 @@ class SemiSelector(tf.keras.Model, ABC):
         :type x: :class:`tensorflow.Tensor`
         :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
         """
-        raise NotImplementedError()
 
-    def flatten(self, x: tf.Tensor) -> tf.Tensor:
-        """Flattens ``x`` into a vector such that all elements set to 0 by :py:meth:`mask` are enumerated first and all elements 
+        # Reshape mask to fit x
+        axes = list(range(len(x.shape)))
+        for axis in self.__axes__: axes.remove(axis) 
+        mask = utt.expand_axes(x=self.__mask__, axes=axes)
+
+        # Mask
+        x_new = x*mask
+
+        # Outputs
+        return x_new
+
+    def arrange(self, x: tf.Tensor) -> tf.Tensor:
+        """Arranges ``x`` into a vector such that all elements set to 0 by :py:meth:`mask` are enumerated first and all elements 
         that passed the mask are enumerated last.
 
-        :param x: The data to be flattened. The shape is assumed to be compatible with :py:meth:`mask`.
+        :param x: The data to be arranged. The shape is assumed to be compatible with :py:meth:`mask`.
         :type x: :class:`tensorflow.Tensor`
-        :return: x_flat (:class:`tensorflow.Tensor`) - The flattened version of ``x`` whose shape is flattened along the axes of 
+        :return: x_flat (:class:`tensorflow.Tensor`) - The arranged version of ``x`` whose shape is arranged along the axes of 
             attribute :py:attr:`__axes__`.
         """
-        raise NotImplementedError()
+        
+        # Select
+        x_1 = tf.boolean_mask(tensor=x, mask=1-self.__mask__, axis=self.__axes__[0])
+        x_2 = tf.boolean_mask(tensor=x, mask=  self.__mask__, axis=self.__axes__[0])
+
+        # Concatenate
+        x_new = tf.concat([x_1, x_2], axis=self.__axes__[0])
 
 class HeaviSide(SemiSelector):
     """Applies a one-dimensional Heaviside function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
@@ -64,19 +80,13 @@ class HeaviSide(SemiSelector):
         assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
 
         # Set up mask
-        mask = np.ones(shape)
+        mask = np.ones(shape, dtype=np.float32)
         mask[:shape[0] // 2] = 0
         if not is_positive: mask = 1 - mask
         mask = tf.Variable(initial_value=mask, trainable=False) 
 
         # Super
-        super(SquareWave1D, self).__init__(axes=axes, mask=mask)
-       
-    def mask(self, x: tf.Tensor) -> tf.Tensor:
-        return super().mask()
-    
-    def flatten(self, x: tf.Tensor) -> tf.Tensor:
-        return super().flatten()
+        super(HeaviSide, self).__init__(axes=axes, mask=mask)
 
 class SquareWave1D(SemiSelector):
     """Applies a one-dimensional square wave of the shape 010101 to its input. Inputs are expected to have 1 spatial axis located at
@@ -104,18 +114,12 @@ class SquareWave1D(SemiSelector):
 
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
-       
-    def mask(self, x: tf.Tensor) -> tf.Tensor:
-        return super().mask()
-    
-    def flatten(self, x: tf.Tensor) -> tf.Tensor:
-        return super().flatten()
 
 class SquareWave2D(SemiSelector):
     """Applies a two-dimensional square wave, also known as checkerboard pattern to its input. Inputs are expected to have 2 spatial
     axes located at ``axes`` with ``shape`` units along those axes.
         
-    :param axes: The two axes along which the square-wave pattern shall be applied.
+    :param axes: The two axes along which the square-wave pattern shall be applied. Assumed to be two consecutive indices.
     :type axes: :class:`List[int]`
     :param shape: The shape of the mask, e.g. 64*32 if an input x has shape [10,3,64,32] and ``axes`` == [2,3].
     :type shape: :class:`List[int]`
@@ -126,6 +130,7 @@ class SquareWave2D(SemiSelector):
     def __init__(self, axes: List[int], shape: List[int], is_positive: bool = True) -> None:
         # Input validity
         assert len(axes) == 2, f"There must be two axes instead of {len(axes)} along which the square-wave shall be applied."
+        assert axes[1] == axes[0] + 1, f"The axes {axes} have to be two consecutive indices."
         assert len(shape) == 2, f"The shape input is equal to {shape}, but it must have two axes."
 
         # Set up mask
@@ -137,20 +142,3 @@ class SquareWave2D(SemiSelector):
         
         # Super
         super(SquareWave2D, self).__init__(axes=axes, mask=mask)
-       
-    def mask(self, x: tf.Tensor) -> tf.Tensor:
-        
-        # Reshape mask to fit x
-        axes = list(range(x.shape))
-        for axis in self.axes: axes.remove(axis) 
-        mask = utt.expand_axes(x=self.__mask__, axes=axes)
-
-        # Mask
-        x_new = x*mask
-
-        # Outputs
-        return x_new
-    
-    def flatten(x: tf.Tensor) -> tf.Tensor:
-        return super().flatten()
-    

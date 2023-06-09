@@ -61,6 +61,9 @@ class SemiSelector(tf.keras.Model, ABC):
         # Concatenate
         x_new = tf.concat([x_1, x_2], axis=self.__axes__[0])
 
+        # Output
+        return x_new
+
 class HeaviSide(SemiSelector):
     """Applies a one-dimensional Heaviside function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
     located at ``axes`` with ``shape`` many elements.
@@ -83,7 +86,7 @@ class HeaviSide(SemiSelector):
         mask = np.ones(shape, dtype=np.float32)
         mask[:shape[0] // 2] = 0
         if not is_positive: mask = 1 - mask
-        mask = tf.Variable(initial_value=mask, trainable=False) 
+        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
 
         # Super
         super(HeaviSide, self).__init__(axes=axes, mask=mask)
@@ -110,7 +113,7 @@ class SquareWave1D(SemiSelector):
         mask = np.ones(shape)
         mask[::2] = 0
         if not is_positive: mask = 1 - mask
-        mask = tf.Variable(initial_value=mask, trainable=False) 
+        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
 
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
@@ -138,7 +141,7 @@ class SquareWave2D(SemiSelector):
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
         if not is_positive: mask = 1 - mask
-        mask = tf.Variable(initial_value=mask, trainable=False) 
+        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
         
         # Super
         super(SquareWave2D, self).__init__(axes=axes, mask=mask)

@@ -19,7 +19,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum(x_target-x_observed).numpy(), second=0)
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_one_dimensional_odd_length(self):
         """Tests whether the mask function of HeaviSide works on a 1 dimensional input of odd length."""
@@ -36,7 +36,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum(x_target-x_observed).numpy(), second=0)
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_two_dimensional_axis_1(self):
         """Tests whether the mask function of HeaviSide works on a two dimensional input along axis 1."""
@@ -53,7 +53,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum(x_target-x_observed).numpy(), second=0)
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_two_dimensional_axis_0(self):
         """Tests whether the mask function of HeaviSide works on a two dimensional input along axis 0."""
@@ -70,7 +70,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum(x_target-x_observed).numpy(), second=0)
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_two_dimensional_axis_1_negative(self):
         """Tests whether the mask function of HeaviSide works on a two dimensional input along axis 1
@@ -88,7 +88,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum(x_target-x_observed).numpy(), second=0)
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
 
 

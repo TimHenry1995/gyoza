@@ -29,8 +29,9 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
-        """Computes the logarithmic determinant of this layer's :py:meth:`call` operation.
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
+        """Computes the jacobian determinant of this layer's :py:meth:`call` on a logarithmic scale. The
+        natural logarithm is chosen for numerical stability.
 
         :param x: The data at which the determinant shall be computed. Assumed to be of shape [batch size, ...].
         :type x: :class:`tensorflow.Tensor`
@@ -76,7 +77,7 @@ class Shuffle(FlowLayer):
         # Outputs
         return x
     
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
         # Outputs
         return 0
@@ -139,9 +140,11 @@ class CouplingLayer(FlowLayer, ABC):
         """A callable, e.g. a :class:`tensorflow.keras.Model` object that maps ``x`` to coupling parameters used to couple 
         ``x`` with itself. The model may be arbitrarily complicated and does not have to be invertible.
         
-        :param x: The data to be transformed. Shape has to allow for masking at :py:attr:`self.__axes__` via :py:attr:`self.__mask__`.
+        :param x: The data to be transformed. Shape [batch size, ...] has to allow for masking at :py:attr:`self.__axes__` via 
+            :py:attr:`self.__mask__`.
         :type x: :class:`tensorflow.Tensor`
-        :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product with ``x``."""
+        :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product
+            with ``x``."""
         
         raise NotImplementedError()
 
@@ -188,10 +191,10 @@ class CouplingLayer(FlowLayer, ABC):
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function implements an invertible coupling for inputs ``x`` and ``parameters``.
         
-        :param x: The data to be transformed.  
+        :param x: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on :py:attr:`self.__axes__`. 
         :type x: :class:`tensorflow.Tensor`
-        :param parameters: Constitutes the parameters that shall be used to transform ``x``. It is assumed to be scalar or have the 
-            same shape as ``x`` or be scalar.
+        :param parameters: Constitutes the parameters that shall be used to transform ``x``. It's shape is assumed to support the 
+            Hadamard product with ``x``.
         :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
         :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``x``."""
 
@@ -200,10 +203,10 @@ class CouplingLayer(FlowLayer, ABC):
     def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function is the inverse of :py:meth:`__couple__`.
         
-        :param y_hat: The data to be transformed.  
+        :param y_hat: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on :py:attr:`self.__axes__`.
         :type y_hat: :class:`tensorflow.Tensor`
-        :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It is assumed to be scalar or have the 
-            same shape as ``y_hat`` or be scalar.
+        :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It's shape is assumed to support the 
+            Hadamard product with ``x``.
         :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
         :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``y_hat``."""
 
@@ -216,8 +219,8 @@ class CouplingLayer(FlowLayer, ABC):
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(y_hat_1)
-        assert self.__assert_parameter_validity__(parameters=coupling_parameters), f"Parameters do not have valid type. Check the specification of your chosen coupling layer for details."
-
+        self.__assert_parameter_validity__(parameters=coupling_parameters)
+        
         # Decouple
         x_1 = y_hat_1
         x_2 = self.__apply_mask__(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), mask=1-self.__mask__)
@@ -252,7 +255,7 @@ class AdditiveCouplingLayer(CouplingLayer):
         # Outputs
         return x
     
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Outputs
         return 0
@@ -300,7 +303,7 @@ class AffineCouplingLayer(CouplingLayer):
         # Outputs
         return x
     
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Split x
         x_1 = self.__apply_mask__(x=x, mask=self.__mask__)
@@ -412,7 +415,7 @@ class ActivationNormalization(FlowLayer):
         # Outputs
         return x
            
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
         # Count elements per instance (ignoring channels)
         instance_count = x.shape[0]
@@ -455,12 +458,12 @@ class SequentialFlowNetwork(FlowLayer):
         # Outputs
         return x
 
-    def compute_logarithmic_determinant(self, x: tf.Tensor) -> tf.Tensor:
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Transform
         logarithmic_determinant = 0
         for layer in self.layers: 
-            logarithmic_determinant += layer.compute_logarithmic_determinant(x=x) 
+            logarithmic_determinant += layer.compute_jacobian_determinant(x=x) 
             x = layer(x=x)
             
         # Outputs

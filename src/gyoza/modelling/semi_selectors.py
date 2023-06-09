@@ -55,8 +55,8 @@ class SemiSelector(tf.keras.Model, ABC):
         """
         
         # Select
-        x_1 = tf.boolean_mask(tensor=x, mask=1-self.__mask__, axis=self.__axes__[0])
-        x_2 = tf.boolean_mask(tensor=x, mask=  self.__mask__, axis=self.__axes__[0])
+        x_1 = tf.boolean_mask(tensor=x, mask=  self.__mask__, axis=self.__axes__[0])
+        x_2 = tf.boolean_mask(tensor=x, mask=1-self.__mask__, axis=self.__axes__[0])
 
         # Concatenate
         x_new = tf.concat([x_1, x_2], axis=self.__axes__[0])

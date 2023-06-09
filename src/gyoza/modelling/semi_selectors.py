@@ -54,12 +54,32 @@ class SemiSelector(tf.keras.Model, ABC):
             attribute :py:attr:`__axes__`.
         """
         
-        # Select
-        x_1 = tf.boolean_mask(tensor=x, mask=  self.__mask__, axis=self.__axes__[0])
-        x_2 = tf.boolean_mask(tensor=x, mask=1-self.__mask__, axis=self.__axes__[0])
+        # Reshape mask to fit x
+        axes = list(range(len(x.shape)))
+        for axis in self.__axes__: axes.remove(axis) 
+        mask = utt.expand_axes(x=self.__mask__, axes=axes)
+        mask = tf.broadcast_to(mask, x.shape)
+
+        # Determine number of elements selected by 1s and by 0s of mask
+        s_1 = (int)(tf.reduce_sum(self.__mask__)) # 1s
+        s_0 = (int)(tf.reduce_prod(self.__mask__.shape)) - s_1 # 0s
+        
+        # Determine shape of each half. Original shape remains except for self.__axes__
+        new_shape_1 = [] 
+        new_shape_0 = [] 
+        for a in range(len(x.shape)):
+            if a == self.__axes__[0]:
+                new_shape_1.append(s_1)
+                new_shape_0.append(s_0)
+            if a not in self.__axes__:
+                new_shape_1.append(x.shape[a])
+                new_shape_0.append(x.shape[a])
+
+        x_1 = tf.reshape(tf.gather_nd(x,tf.where(mask)),   new_shape_1)
+        x_0 = tf.reshape(tf.gather_nd(x,tf.where(1-mask)), new_shape_0)
 
         # Concatenate
-        x_new = tf.concat([x_1, x_2], axis=self.__axes__[0])
+        x_new = tf.concat([x_1, x_0], axis=self.__axes__[0])
 
         # Output
         return x_new

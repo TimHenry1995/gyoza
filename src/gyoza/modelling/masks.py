@@ -2,6 +2,7 @@ import tensorflow as tf, numpy as np
 import gyoza.utilities.tensors as utt
 from abc import ABC
 from typing import List
+import copy as cp
 
 class Mask(tf.keras.Model, ABC):
     """This class can be used to curate elements of a tensor x. As suggested by the name semi, half of x is selected
@@ -92,13 +93,12 @@ class Mask(tf.keras.Model, ABC):
 
         :param x: The data to be arranged. The shape is assumed to be compatible with :py:meth:`mask`.
         :type x: :class:`tensorflow.Tensor`
-        :return: x_flat (:class:`tensorflow.Tensor`) - The arranged version of ``x`` whose shape is arranged along the axes of 
-            attribute :py:attr:`__axes__`.
+        :return: x_flat (:class:`tensorflow.Tensor`) - The arranged version of ``x`` whose shape is flattened along the first axis
+            of attribute :py:attr:`__axes__`.
         """
         
         # Flatten x along self.__axes__ to fit from_to 
-        old_shape = list(x.shape)
-        new_shape = old_shape
+        new_shape = list(x.shape)
         new_shape[self.__axes__[0]] = self.__from_to__.shape[0]
         for a in self.__axes__[1:]:
             del new_shape[a]
@@ -121,9 +121,6 @@ class Mask(tf.keras.Model, ABC):
         axes[-1] = tmp
         x_new = tf.transpose(x_new, perm=axes)
 
-        # Unflatten x along self.__axes__
-        x_new = tf.reshape(x_new, old_shape) 
-
         # Output
         return x_new
     
@@ -135,12 +132,32 @@ class Mask(tf.keras.Model, ABC):
         
         :return: x (tensorflow.Tensor) - The input to :py:meth:`arrange`."""
 
-        # To invert arrange, we can call arrange on the transpose multiplication with self.__from_to__
+        # Move self.__axes__[0] to end
+        axes = list(range(len(x_new.shape)))
+        tmp = axes[-1]
+        axes[-1] = self.__axes__[0]
+        axes[self.__axes__[0]] = tmp
+        x_new = tf.transpose(x_new, perm=axes)
+
+        # To invert arrange, we transpose multiplication with self.__from_to__
         self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
-        x = self.arrange(x=x_new)
         
+        # Matrix multiply
+        x = self.__mat_mul__(x_new[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
+
         # Undo the change to satistfy postcondition == precondition
         self.__mat_mul__.set_weights([self.__from_to__])
+
+        # Move final axis to self.__axis__[0]
+        axes = list(range(len(x.shape)))
+        tmp = axes[self.__axes__[0]]
+        axes[self.__axes__[0]] = axes[-1]
+        axes[-1] = tmp
+        x = tf.transpose(x, perm=axes)
+
+        # Unflatten along self.__axes__
+        old_shape = x.shape[:self.__axes__[0]] + self.__mask__.shape + x.shape[self.__axes__[0]+1:]
+        x = tf.reshape(x, shape=old_shape)
 
         # Outputs
         return x

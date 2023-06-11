@@ -60,21 +60,28 @@ class Mask(tf.keras.Model, ABC):
         # Outputs
         return from_to
 
-    def get(self, x: tf.Tensor) -> tf.Tensor:
-        """Applies a binary mask to ``x`` such that half of its entries are set to zero and the other half passes.
+    def apply(self, x: tf.Tensor, is_positive: bool = True) -> tf.Tensor:
+        """Applies the binary mask of self to ``x``.
 
         :param x: The data to be masked. The expected shape of ``x`` depends on the axis and shape specified during initialization.
         :type x: :class:`tensorflow.Tensor`
+        :param is_positive: Indicates whether the positive or negative mask version shall be applied, where negative == 1 - positive.
+            Default is True.
+        :type is_positive: bool, optional
         :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
         """
+
+        # Parity
+        if is_positive: mask = self.__mask__
+        else: mask = 1 - self.__mask__
 
         # Reshape mask to fit x
         axes = list(range(len(x.shape)))
         for axis in self.__axes__: axes.remove(axis) 
-        mask = utt.expand_axes(x=self.__mask__, axes=axes)
+        mask = utt.expand_axes(x=mask, axes=axes)
 
-        # Mask
-        x_new = x*mask
+        # Apply mask to x
+        x_new = x * mask
 
         # Outputs
         return x_new
@@ -133,7 +140,7 @@ class Mask(tf.keras.Model, ABC):
         x = self.arrange(x=x_new)
         
         # Undo the change to satistfy postcondition == precondition
-        self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
+        self.__mat_mul__.set_weights([self.__from_to__])
 
         # Outputs
         return x
@@ -147,11 +154,9 @@ class HeaviSide(Mask):
     :type axes: :class:`List[int]`
     :param shape: The number of units along ``axes``, e.g. [5] if an input x has shape [3,5,2] and ``axes`` == [1].
     :type shape: :class:`List[int]`
-    :param is_positive: If set to True, then the first ``shape`` // 2 units are set to zero while the remainig ones pass. If set to 
-        False, the mask is flipped.
-    :type is_positive: bool, optional"""
+    """
 
-    def __init__(self, axes: int, shape: int, is_positive: bool = True):
+    def __init__(self, axes: int, shape: int):
         
         # Input validity
         assert len(axes) == 1, f"There must be one axis instead of {len(axes)} along which the Heaviside shall be applied."
@@ -160,7 +165,6 @@ class HeaviSide(Mask):
         # Set up mask
         mask = np.ones(shape, dtype=np.float32)
         mask[:shape[0] // 2] = 0
-        if not is_positive: mask = 1 - mask
         mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
 
         # Super
@@ -174,11 +178,9 @@ class SquareWave1D(Mask):
     :type axes: :class:`List[int]`
     :param shape: The number of units along ``axes``, e.g. [5] if an input x has shape [3,5,2] and ``axes`` == [1].
     :type shape: :class:`List[int]`
-    :param is_positive: If set to True, then units at odd indices pass while units at even indices are set to zero.
-        If set to False, the mask is flipped.
-    :type is_positive: bool, optional"""
+    """
 
-    def __init__(self, axes: int, shape: int, is_positive: bool = True):
+    def __init__(self, axes: int, shape: int):
         
         # Input validity
         assert len(axes) == 1, f"There must be one axis instead of {len(axes)} along which the square-wave shall be applied."
@@ -187,7 +189,6 @@ class SquareWave1D(Mask):
         # Set up mask
         mask = np.ones(shape)
         mask[::2] = 0
-        if not is_positive: mask = 1 - mask
         mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
 
         # Super
@@ -201,11 +202,9 @@ class SquareWave2D(Mask):
     :type axes: :class:`List[int]`
     :param shape: The shape of the mask, e.g. 64*32 if an input x has shape [10,3,64,32] and ``axes`` == [2,3].
     :type shape: :class:`List[int]`
-    :param is_positive: If set to True, the mask is equal to 1 where the sum of indices is odd and 0 otherwise. 
-        If set to False, the mask is flipped.
-    :type is_positive: bool, optional"""
+    """
 
-    def __init__(self, axes: List[int], shape: List[int], is_positive: bool = True) -> None:
+    def __init__(self, axes: List[int], shape: List[int]) -> None:
         # Input validity
         assert len(axes) == 2, f"There must be two axes instead of {len(axes)} along which the square-wave shall be applied."
         assert axes[1] == axes[0] + 1, f"The axes {axes} have to be two consecutive indices."
@@ -215,7 +214,6 @@ class SquareWave2D(Mask):
         mask = np.ones(shape) 
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
-        if not is_positive: mask = 1 - mask
         mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
         
         # Super

@@ -20,10 +20,10 @@ gyoza.modelling.losses module
    :undoc-members:
    :show-inheritance:
 
-gyoza.modelling.semi\_selectors module
---------------------------------------
+gyoza.modelling.masks module
+----------------------------
 
-.. automodule:: gyoza.modelling.semi_selectors
+.. automodule:: gyoza.modelling.masks
    :members:
    :undoc-members:
    :show-inheritance:

@@ -11,7 +11,8 @@ class BasicFullyConnectedNet(tf.keras.Model):
         layer mapping from input to output. If set to 1, then there will be 1 intermediate layer, etc. 
     :param bool, optional use_tanh: Indicates whether each layer shall use the hyperbolic tangent activaction function. If set to False, 
         then a leaky relu is used. Defaults to False.
-    :param bool, optional use_batch_normalization: Indicates whether each layer shall use batch normalization or not. Defaults to False."""
+    :param bool, optional use_batch_normalization: Indicates whether each layer shall use batch normalization or not. Defaults to False.
+    """
 
     def __init__(self, latent_channel_count:int, output_channel_count:int, depth: int, use_tanh:bool=False, use_batch_normalization:bool=False):
         
@@ -33,6 +34,7 @@ class BasicFullyConnectedNet(tf.keras.Model):
         """Attribute that refers to the :class:`tensorflow.keras.Sequential` model collecting all layers of self."""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
+        """"""
         
         # Predict
         y_hat = self.sequential(x)
@@ -64,6 +66,7 @@ class ChannelWiseConvolution2D(tf.keras.Model):
         self.sequential = tf.keras.models.Sequential(layers=layers)
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
+        """"""
         
         # Predict
         y_hat = self.sequential(x)

@@ -3,6 +3,7 @@ import tensorflow as tf
 from typing import Any, Tuple, List, Callable
 from abc import ABC
 from gyoza.utilities import tensors as utt
+import gyoza.modelling.masks as mms
 
 class FlowLayer(tf.keras.Model, ABC):
     """Abstract base class for flow layers
@@ -96,7 +97,7 @@ class CouplingLayer(FlowLayer, ABC):
         :py:meth:`compute_coupling_parameters` for a detailed description of requirements.
     :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
     :param mask: The mask used to select one half of the data while discarding the other half.
-    :type mask: :class:`tensorflow.Tensor`
+    :type mask: :class:`gyoza.modelling.masks.Mask`
     :param axes: The axis along which the couplin shall be executed. Assumed to be consecutive.
     :type axes: :class:`List[int]`
     
@@ -106,10 +107,10 @@ class CouplingLayer(FlowLayer, ABC):
         - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: mms.Mask, axes: List[int]):
 
         # Input validity
-        assert len(mask.shape) == len(axes), f"The mask ({len(mask.shape)} axes) should have as many axes as the axes parameter ({len(axes)})"
+        assert len(mask.__mask__.shape) == len(axes), f"The mask of shape {len(mask__mask__.shape)} should have as many axes as the axes parameter ({len(axes)})"
         for a in range(len(axes)-1):
             assert axes[a]+1 == axes[a+1], f"The axes ({axes}) have to be consecutive."
         
@@ -119,8 +120,8 @@ class CouplingLayer(FlowLayer, ABC):
         # Attributes
         self.compute_coupling_parameters = compute_coupling_parameters
         
-        self.__mask__ = tf.cast(mask, dtype=tf.float32)
-        """(:class:`tensorflow.Variable`) - The mask used to select one half of the data while discarding the other half."""
+        self.__mask__ = mask
+        """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
 
         self.__axes__ = axes
         """(:class:`List[int]`) - The axes along which the selection shall be applied."""
@@ -148,31 +149,10 @@ class CouplingLayer(FlowLayer, ABC):
         
         raise NotImplementedError()
 
-    def __apply_mask__(self, x: tf.Tensor, mask: tf.Variable) -> tf.Tensor:
-        """Applies the ``mask`` to ``x``.
-
-        :param x: The data to be masked. Shape has to allow for masking at :py:attr:`self.__axes__` via :py:attr:`self.__mask__`.
-        :type x: :class:`tensorflow.Tensor`
-        :param mask: The mask to be applied. Its shape can be minimal as it will be broadcasted to fit x.
-        :type mask: :class:`tensorflow.Variable`
-        :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
-        """
-
-        # Reshape mask to fit x
-        axes = list(range(len(x.shape)))
-        for axis in self.__axes__: axes.remove(axis) 
-        mask = utt.expand_axes(x=mask, axes=axes)
-
-        # Mask
-        x_masked = x*mask
-
-        # Outputs
-        return x_masked
-
     def call(self, x: tf.Tensor) -> tf.Tensor:
 
         # Split x
-        x_1 = self.__apply_mask__(x=x, mask=self.__mask__)
+        x_1 = self.__mask__.apply(x=x)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(x_1)
@@ -180,7 +160,7 @@ class CouplingLayer(FlowLayer, ABC):
 
         # Couple
         y_hat_1 = x_1
-        y_hat_2 = self.__apply_mask__(x=self.__couple__(x=x, parameters=coupling_parameters), mask=1-self.__mask__)
+        y_hat_2 = self.__mask__.apply(x=self.__couple__(x=x, parameters=coupling_parameters), is_positive=False)
 
         # Combine
         y_hat = y_hat_1 + y_hat_2
@@ -215,7 +195,7 @@ class CouplingLayer(FlowLayer, ABC):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Split
-        y_hat_1 = self.__apply_mask__(x=y_hat, mask=self.__mask__)
+        y_hat_1 = self.__mask__.apply(x=y_hat)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(y_hat_1)
@@ -223,7 +203,7 @@ class CouplingLayer(FlowLayer, ABC):
         
         # Decouple
         x_1 = y_hat_1
-        x_2 = self.__apply_mask__(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), mask=1-self.__mask__)
+        x_2 = self.__mask__.apply(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), is_positive=False)
 
         # Combine
         x = x_1 + x_2
@@ -306,7 +286,7 @@ class AffineCouplingLayer(CouplingLayer):
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Split x
-        x_1 = self.__apply_mask__(x=x, mask=self.__mask__)
+        x_1 = self.__mask__.apply(x=x)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(x_1)

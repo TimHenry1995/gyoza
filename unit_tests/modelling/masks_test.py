@@ -15,7 +15,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[0], shape=[10])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -32,7 +32,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[0], shape=[11])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -49,7 +49,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[1], shape=[5])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -66,7 +66,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[0], shape=[3])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -84,7 +84,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[1], shape=[5], is_positive=False)
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -111,13 +111,13 @@ class TestHeaviSide(unittest.TestCase):
         """Tests whether the arrange method of HeaviSide works on a two dimensional input along axis 1."""
 
         # Initialize
-        x = tf.reshape(tf.range(15, dtype=tf.float32), shape=[3,5])
+        x = tf.reshape(tf.range(21, dtype=tf.float32), shape=[3,7])
 
         # Target
-        x_target = tf.concat([x[:,2:],x[:,:2]],axis=1)
+        x_target = tf.concat([x[:,3:],x[:,:3]],axis=1)
 
         # Observe
-        instance = mms.HeaviSide(axes=[1], shape=[5])
+        instance = mms.HeaviSide(axes=[1], shape=[7])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
@@ -139,7 +139,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[0], shape=[10])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -158,7 +158,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[1], shape=[5])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -177,7 +177,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[0], shape=[3])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -197,7 +197,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[1], shape=[5], is_positive=False)
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -271,7 +271,7 @@ class TestSquareWave2D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave2D(axes=[0,1], shape=[3,5])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -292,7 +292,7 @@ class TestSquareWave2D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave2D(axes=[1,2], shape=[3,5])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -313,7 +313,7 @@ class TestSquareWave2D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave2D(axes=[1,2], shape=[3,5])
-        x_observed = instance.get(x=x)
+        x_observed = instance.broadcast_to(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -395,4 +395,4 @@ class TestSquareWave2D(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestSquareWave1D.test_arrange_two_dimensional_axis_0(None)
+    TestHeaviSide.test_arrange_two_dimensional_axis_1(None)

@@ -3,7 +3,7 @@ import gyoza.utilities.tensors as utt
 from abc import ABC
 from typing import List
 
-class SemiSelector(tf.keras.Model, ABC):
+class Mask(tf.keras.Model, ABC):
     """This class can be used to curate elements of a tensor x. As suggested by the name semi, half of x is selected
     while the other half is not."""
 
@@ -17,15 +17,50 @@ class SemiSelector(tf.keras.Model, ABC):
         """
 
         # Super
-        super(SemiSelector, self).__init__()
+        super(Mask, self).__init__()
 
         self.__axes__ = axes
-        """The axes along which the selection shall be applied."""
+        """(:class:List[int]`) - The axes along which the selection shall be applied."""
 
         self.__mask__ = mask
-        """The mask to be applied to data passing through this layer."""
+        """(:class:`tensorflow.Tensor) - The mask to be applied to data passing through this layer."""
 
-    def mask(self, x: tf.Tensor) -> tf.Tensor:
+        self.__from_to__ = Mask.__compute_from_to__(mask=mask)
+        """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
+
+        self.__mat_mul__ = tf.keras.layers.Dense(units=self.__from_to__.shape[0], use_bias=False, activation=None)
+        """(:class:`tensorflow.keras.layers.core.dense.Dense`) - A simple dense layer used for matrix multiplication."""
+
+        self.__mat_mul__.build(input_shape=[self.__from_to__.shape[0]])
+        self.__mat_mul__.set_weights([self.__from_to__])
+
+    @staticmethod
+    def __compute_from_to__(mask: tf.Tensor) -> tf.Tensor:
+        """Sets up a matrix that can be used to arrange all elements of an input x (after flattening) such the ones marked with a 1 
+        by the mask appear first while the ones marked with a zero occur last.
+        
+        :param mask: The mask that defines the mapping. It can be of arbitrary shape since it will be flattened internally.
+        :type mask: tensorflow.Tensor.
+        :return: from_to (tensorflow.Tensor) - The matrix that determines the mapping on flattened inputs. Note: to arrange elements
+            of an input x one has to flatten x along the mask dimension first, then broadcast ``from_to`` to fit the new shape of x.
+            After matrix multiplication of the two one needs to undo the flattening to get the arrange x."""
+
+        # Flatten mask
+        mask = tf.reshape(mask, [-1]) 
+
+        # Determine indices
+        from_indices = tf.concat([tf.where(mask), tf.where(1-mask)],0).numpy()[:,0].tolist()
+        to_indices = list(range(len(from_indices)))
+        
+        # Set up matrix
+        from_to = np.zeros(shape=[mask.shape[0],mask.shape[0]]) # Square matrix
+        from_to[from_indices, to_indices] = 1
+        from_to = tf.Variable(from_to, dtype=tf.float32)
+
+        # Outputs
+        return from_to
+
+    def get(self, x: tf.Tensor) -> tf.Tensor:
         """Applies a binary mask to ``x`` such that half of its entries are set to zero and the other half passes.
 
         :param x: The data to be masked. The expected shape of ``x`` depends on the axis and shape specified during initialization.
@@ -54,37 +89,57 @@ class SemiSelector(tf.keras.Model, ABC):
             attribute :py:attr:`__axes__`.
         """
         
-        # Reshape mask to fit x
-        axes = list(range(len(x.shape)))
-        for axis in self.__axes__: axes.remove(axis) 
-        mask = utt.expand_axes(x=self.__mask__, axes=axes)
-        mask = tf.broadcast_to(mask, x.shape)
-
-        # Determine number of elements selected by 1s and by 0s of mask
-        s_1 = (int)(tf.reduce_sum(self.__mask__)) # 1s
-        s_0 = (int)(tf.reduce_prod(self.__mask__.shape)) - s_1 # 0s
+        # Flatten x along self.__axes__ to fit from_to 
+        old_shape = list(x.shape)
+        new_shape = old_shape
+        new_shape[self.__axes__[0]] = self.__from_to__.shape[0]
+        for a in self.__axes__[1:]:
+            del new_shape[a]
+        x = tf.reshape(x, new_shape) # Now has original shape except for self.__axes__ which have been flattened
         
-        # Determine shape of each half. Original shape remains except for self.__axes__
-        new_shape_1 = [] 
-        new_shape_0 = [] 
-        for a in range(len(x.shape)):
-            if a == self.__axes__[0]:
-                new_shape_1.append(s_1)
-                new_shape_0.append(s_0)
-            if a not in self.__axes__:
-                new_shape_1.append(x.shape[a])
-                new_shape_0.append(x.shape[a])
+        # Move self.__axes__[0] to end
+        axes = list(range(len(x.shape)))
+        tmp = axes[-1]
+        axes[-1] = self.__axes__[0]
+        axes[self.__axes__[0]] = tmp
+        x = tf.transpose(x, perm=axes)
 
-        x_1 = tf.reshape(tf.gather_nd(x,tf.where(mask)),   new_shape_1)
-        x_0 = tf.reshape(tf.gather_nd(x,tf.where(1-mask)), new_shape_0)
+        # Matrix multiply
+        x_new = self.__mat_mul__(x[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
 
-        # Concatenate
-        x_new = tf.concat([x_1, x_0], axis=self.__axes__[0])
+        # Move final axis to self.__axis__[0]
+        axes = list(range(len(x_new.shape)))
+        tmp = axes[self.__axes__[0]]
+        axes[self.__axes__[0]] = axes[-1]
+        axes[-1] = tmp
+        x_new = tf.transpose(x_new, perm=axes)
+
+        # Unflatten x along self.__axes__
+        x_new = tf.reshape(x_new, old_shape) 
 
         # Output
         return x_new
+    
+    def re_arrange(self, x_new: tf.Tensor) -> tf.Tensor:
+        """This function is the inverse of :py:meth:`arrange`.
+        
+        :param x_new: The output of :py:meth:`arrange`.
+        :type x: :class:`tensorflow.Tensor`
+        
+        :return: x (tensorflow.Tensor) - The input to :py:meth:`arrange`."""
 
-class HeaviSide(SemiSelector):
+        # To invert arrange, we can call arrange on the transpose multiplication with self.__from_to__
+        self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
+        x = self.arrange(x=x_new)
+        
+        # Undo the change to satistfy postcondition == precondition
+        self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
+
+        # Outputs
+        return x
+       
+
+class HeaviSide(Mask):
     """Applies a one-dimensional Heaviside function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
     located at ``axes`` with ``shape`` many elements.
     
@@ -111,7 +166,7 @@ class HeaviSide(SemiSelector):
         # Super
         super(HeaviSide, self).__init__(axes=axes, mask=mask)
 
-class SquareWave1D(SemiSelector):
+class SquareWave1D(Mask):
     """Applies a one-dimensional square wave of the shape 010101 to its input. Inputs are expected to have 1 spatial axis located at
     ``axes`` with ``shape`` many elements.
     
@@ -138,7 +193,7 @@ class SquareWave1D(SemiSelector):
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
 
-class SquareWave2D(SemiSelector):
+class SquareWave2D(Mask):
     """Applies a two-dimensional square wave, also known as checkerboard pattern to its input. Inputs are expected to have 2 spatial
     axes located at ``axes`` with ``shape`` units along those axes.
         

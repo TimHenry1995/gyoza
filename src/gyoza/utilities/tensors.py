@@ -1,5 +1,5 @@
 import tensorflow as tf
-import copy as cp
+from typing import List
 
 def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
     """Moves an axis from from_index to to_index.
@@ -57,3 +57,45 @@ def expand_axes(x: tf.Tensor, axes) -> tf.Tensor:
 
     # Outputs
     return x_new
+
+def flatten_along_axes(x: tf.Tensor, axes: List[int]) -> tf.Tensor:
+    """Flattens an input ``x`` along axes ``axes``.
+    
+    :param x: The input to be flattened. Assumed to have at least as many axes as indicated by ``axes``.
+    :type x: :class:`tensorflow.Tensor`
+    :param axes: The axes along which the input shall be flattened.
+    :type axes: :class:`List[int]`
+    :return: x_new (:class:`tensorflow.Tensor`) - The reshaped tensor ``x`` flattened along ``axes``."""
+
+    # Reshape
+    new_shape = list(x.shape)
+    new_shape[axes[0]] = tf.reduce_prod(x.shape[axes[0]:axes[-1]+1]).numpy()
+    for a in axes[1:]:
+        del new_shape[a]
+    x_new = tf.reshape(x, new_shape) # Now has original shape except for axes which have been flattened
+
+    # Outputs
+    return x_new
+
+def swop_axes(x: tf.Tensor, from_axis: int, to_axis: int) -> tf.Tensor:
+    """Swops axes of ``x``.
+    
+    :param x: The input whose axes shall be swopped. Assumed to have at least as many axes as indicated by 
+        ``from_axis`` and ``to_axis''.
+    :type x: :class:`tensorflow.Tensor`
+    :param from_axis: The axes to be swopped with ``to_axis``.
+    :type from_axis: int
+    :param to_axis: The axes to be swopped with ``from_axis``.
+    :type to_axis: int
+    :return: x_new (:class:`tensorflow.Tensor`) - The input which ``from_axis`` and ``to_axis`` swopped."""
+
+    # Reshape
+    axes = list(range(len(x.shape)))
+    tmp = axes[to_axis]
+    axes[to_axis] = axes[from_axis]
+    axes[from_axis] = tmp
+    x_new = tf.transpose(x, perm=axes)
+
+    # Outputs
+    return x_new 
+        

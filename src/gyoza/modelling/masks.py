@@ -98,28 +98,16 @@ class Mask(tf.keras.Model, ABC):
         """
         
         # Flatten x along self.__axes__ to fit from_to 
-        new_shape = list(x.shape)
-        new_shape[self.__axes__[0]] = self.__from_to__.shape[0]
-        for a in self.__axes__[1:]:
-            del new_shape[a]
-        x = tf.reshape(x, new_shape) # Now has original shape except for self.__axes__ which have been flattened
-        
+        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+
         # Move self.__axes__[0] to end
-        axes = list(range(len(x.shape)))
-        tmp = axes[-1]
-        axes[-1] = self.__axes__[0]
-        axes[self.__axes__[0]] = tmp
-        x = tf.transpose(x, perm=axes)
+        x = utt.swop_axes(x=x, from_axis=self.__axes__[0], to_axis=-1)
 
         # Matrix multiply
         x_new = self.__mat_mul__(x[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
 
         # Move final axis to self.__axis__[0]
-        axes = list(range(len(x_new.shape)))
-        tmp = axes[self.__axes__[0]]
-        axes[self.__axes__[0]] = axes[-1]
-        axes[-1] = tmp
-        x_new = tf.transpose(x_new, perm=axes)
+        x_new = utt.swop_axes(x=x_new, from_axis=-1, to_axis=self.__axes__[0])
 
         # Output
         return x_new
@@ -133,12 +121,8 @@ class Mask(tf.keras.Model, ABC):
         :return: x (tensorflow.Tensor) - The input to :py:meth:`arrange`."""
 
         # Move self.__axes__[0] to end
-        axes = list(range(len(x_new.shape)))
-        tmp = axes[-1]
-        axes[-1] = self.__axes__[0]
-        axes[self.__axes__[0]] = tmp
-        x_new = tf.transpose(x_new, perm=axes)
-
+        x_new = utt.swop_axes(x=x_new, from_axis=self.__axes__[0], to_axis=-1)
+        
         # To invert arrange, we transpose multiplication with self.__from_to__
         self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
         
@@ -149,11 +133,7 @@ class Mask(tf.keras.Model, ABC):
         self.__mat_mul__.set_weights([self.__from_to__])
 
         # Move final axis to self.__axis__[0]
-        axes = list(range(len(x.shape)))
-        tmp = axes[self.__axes__[0]]
-        axes[self.__axes__[0]] = axes[-1]
-        axes[-1] = tmp
-        x = tf.transpose(x, perm=axes)
+        x = utt.swop_axes(x=x, from_axis=-1, to_axis=self.__axes__[0])
 
         # Unflatten along self.__axes__
         old_shape = x.shape[:self.__axes__[0]] + self.__mask__.shape + x.shape[self.__axes__[0]+1:]

@@ -555,4 +555,4 @@ class TestSquareWave2D(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestHeaviSide.test_re_arrange_one_dimensional_odd(None)
+    TestSquareWave2D.test_arrange_four_dimensional_axis_1_2(None)

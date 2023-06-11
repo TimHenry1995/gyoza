@@ -98,8 +98,6 @@ class CouplingLayer(FlowLayer, ABC):
     :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
     :param mask: The mask used to select one half of the data while discarding the other half.
     :type mask: :class:`gyoza.modelling.masks.Mask`
-    :param axes: The axis along which the couplin shall be executed. Assumed to be consecutive.
-    :type axes: :class:`List[int]`
     
     References:
 
@@ -107,13 +105,8 @@ class CouplingLayer(FlowLayer, ABC):
         - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: mms.Mask, axes: List[int]):
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
 
-        # Input validity
-        assert len(mask.__mask__.shape) == len(axes), f"The mask of shape {len(mask__mask__.shape)} should have as many axes as the axes parameter ({len(axes)})"
-        for a in range(len(axes)-1):
-            assert axes[a]+1 == axes[a+1], f"The axes ({axes}) have to be consecutive."
-        
         # Super
         super(CouplingLayer, self).__init__()
 
@@ -122,9 +115,6 @@ class CouplingLayer(FlowLayer, ABC):
         
         self.__mask__ = mask
         """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
-
-        self.__axes__ = axes
-        """(:class:`List[int]`) - The axes along which the selection shall be applied."""
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -141,7 +131,7 @@ class CouplingLayer(FlowLayer, ABC):
         """A callable, e.g. a :class:`tensorflow.keras.Model` object that maps ``x`` to coupling parameters used to couple 
         ``x`` with itself. The model may be arbitrarily complicated and does not have to be invertible.
         
-        :param x: The data to be transformed. Shape [batch size, ...] has to allow for masking at :py:attr:`self.__axes__` via 
+        :param x: The data to be transformed. Shape [batch size, ...] has to allow for masking via 
             :py:attr:`self.__mask__`.
         :type x: :class:`tensorflow.Tensor`
         :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product
@@ -171,7 +161,7 @@ class CouplingLayer(FlowLayer, ABC):
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function implements an invertible coupling for inputs ``x`` and ``parameters``.
         
-        :param x: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on :py:attr:`self.__axes__`. 
+        :param x: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on axes of :py:attr:`self.__mask__`. 
         :type x: :class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``x``. It's shape is assumed to support the 
             Hadamard product with ``x``.
@@ -183,7 +173,7 @@ class CouplingLayer(FlowLayer, ABC):
     def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function is the inverse of :py:meth:`__couple__`.
         
-        :param y_hat: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on :py:attr:`self.__axes__`.
+        :param y_hat: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on axes :py:attr:`self.__mask__`.
         :type y_hat: :class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It's shape is assumed to support the 
             Hadamard product with ``x``.
@@ -214,10 +204,10 @@ class CouplingLayer(FlowLayer, ABC):
 class AdditiveCouplingLayer(CouplingLayer):
     """This couplign layer implements an additive coupling of the form y = x + parameters"""
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AdditiveCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask, axes=axes)
+        super(AdditiveCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         
@@ -245,10 +235,10 @@ class AffineCouplingLayer(CouplingLayer):
     and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
 
     
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, axes: List[int]):
+    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AffineCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask, axes=axes)
+        super(AffineCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -294,7 +284,7 @@ class AffineCouplingLayer(CouplingLayer):
         # Determinant
         logarithmic_scale = coupling_parameters[0]
         logarithmic_determinant = 0
-        for axis in self.__axes__:
+        for axis in self.__mask__.__axes__:
             logarithmic_determinant += tf.reduce_sum(logarithmic_scale, axis=axis)
 
         # Outputs

@@ -145,7 +145,6 @@ class Mask(tf.keras.Model, ABC):
         # Outputs
         return x
        
-
 class HeaviSide(Mask):
     """Applies a one-dimensional Heaviside function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
     located at ``axes`` with ``shape`` many elements.

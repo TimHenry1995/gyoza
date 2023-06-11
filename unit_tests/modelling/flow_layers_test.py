@@ -129,9 +129,8 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            # Fixed
             y = layer(x)
-            y=mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         
         # Observe
@@ -158,9 +157,8 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            # Fixed
             y = layer(x)
-            y=mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -190,9 +188,8 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            # Fixed
             y = layer(x)
-            y=mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -209,26 +206,143 @@ class TestAdditiveCoupling(unittest.TestCase):
         with square wave 2D mask."""
 
         # Initialize
-        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
-        mask = mms.HeaviSide(axes=[1], shape=[5])
+        compute_coupling_parameters = tf.keras.Sequential([
+            tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
+            tf.keras.layers.Dense(units=7),
+            tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
+        mask = mms.SquareWave2D(axes=[0,1], shape=[2,7])
         layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(10,dtype=tf.float32), [2,5])
+        x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
 
         # Compute jacobian
-        @tf.function
-        def compute_jacobian(x):
-            y_hat = layer(x)
-            return tf.reduce_sum(jacobian(y_hat,x), axis=2) # The second axis is reduncant
-
-        J = compute_jacobian(x=x).numpy()
+        x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
+        with tf.GradientTape() as tape:
+            tape.watch(x_new)
+            x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
+            y = layer(x)
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            J = tape.jacobian(y,x_new)
         
         # Observe
-        x_observed = True
-        for j in range(J.shape[0]):
-            x_observed = x_observed and np.allclose(J[j], np.tril(J[j]))
+        x_observed = np.allclose(J, np.tril(J)) or np.allclose(J, np.triu(J))
         
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
+    def test_call_triangular_jacobian_4_dimensional_input_square_wave_2_d_mask(self):
+        """Tests whether the call method of AdditiveCouplingLayer produces a triangular jacobian on 4-dimensional inputs 
+        with square wave 2D mask."""
+
+        # Initialize
+        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
+        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
+
+        # Compute jacobian
+        x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
+        with tf.GradientTape() as tape:
+            tape.watch(x_new)
+            x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
+            y = layer(x)
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            J = tape.jacobian(y,x_new)
+        J = tf.reduce_sum(J, axis=5) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        J = tf.reduce_sum(J, axis=3)
+        J = tf.reduce_sum(J, axis=2)
+
+        # Observe
+        x_observed = True
+        for j in range(J.shape[0]):
+            x_observed = x_observed and (np.allclose(J, np.tril(J)) or np.allclose(J, np.triu(J)))
+        
+        # Evaluate
+        self.assertEqual(first=x_observed, second=True)
+
+    def test_compute_jacobian_determinant_2_dimensional_input_square_wave_1_d_mask(self):
+        """Tests whether the compute_jacobian_determinant method of AdditiveCouplingLayer correctly computes the determinant on 
+        2-dimensional inputs with a square wave 1D mask."""
+
+        # Initialize
+        compute_coupling_parameters = tf.keras.Sequential([
+            tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
+            tf.keras.layers.Dense(units=7),
+            tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
+        mask = mms.SquareWave1D(axes=[1], shape=[7])
+        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
+
+        # Observe
+        x_observed = layer.compute_jacobian_determinant(x=x)
+
+        # Target
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            y = layer(x)
+            J = tape.jacobian(y,x)
+        J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        
+        # Evaluate
+        for j in range(J.shape[0]):
+            self.assertEqual(first=x_observed[j], second=np.log(np.linalg.det(J[j].numpy())))  
+
+    def test_compute_jacobian_determinant_2_dimensional_input_square_wave_2_d_mask(self):
+        """Tests whether the compute_jacobian_determinant method of AdditiveCouplingLayer correctly computes the determinant on 
+        2-dimensional inputs with a square wave 2D mask."""
+
+        # Initialize
+        compute_coupling_parameters = tf.keras.Sequential([
+            tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
+            tf.keras.layers.Dense(units=7),
+            tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
+        mask = mms.SquareWave2D(axes=[0,1], shape=[2,7])
+        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
+
+        # Observe
+        x_observed = layer.compute_jacobian_determinant(x=x[tf.newaxis])[0] # newaxis because we need to have a batch of one element
+
+        # Target
+        x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
+        with tf.GradientTape() as tape:
+            tape.watch(x_new)
+            x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
+            y = layer(x)
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            J = tape.jacobian(y,x_new)
+        
+        # Evaluate
+        self.assertEqual(first=x_observed, second=np.log(np.linalg.det(J.numpy())))  
+
+    def test_compute_jacobian_determinant_4_dimensional_input_square_wave_2_d_mask(self):
+        """Tests whether the call method of AdditiveCouplingLayer produces a triangular jacobian on 4-dimensional inputs 
+        with square wave 2D mask."""
+
+        # Initialize
+        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
+        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
+
+        # Observe
+        x_observed = layer.compute_jacobian_determinant(x=x)
+
+        # Compute jacobian
+        x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
+        with tf.GradientTape() as tape:
+            tape.watch(x_new)
+            x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
+            y = layer(x)
+            y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
+            J = tape.jacobian(y,x_new)
+        J = tf.reduce_sum(J, axis=5) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        J = tf.reduce_sum(J, axis=3)
+        J = tf.reduce_sum(J, axis=2)
+
+        # Evaluate
+        for j in range(J.shape[0]):
+             self.assertEqual(first=x_observed[j], second=np.log(np.linalg.det(J[j].numpy())))
+
 if __name__ == "__main__":
-    unittest.main()
+    #unittest.main()
+    TestAdditiveCoupling().test_call_triangular_jacobian_4_dimensional_input_square_wave_2_d_mask()

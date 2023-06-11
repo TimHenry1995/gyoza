@@ -227,14 +227,16 @@ class AdditiveCouplingLayer(CouplingLayer):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
+        # Shape
+        batch_size = x.shape[0]
+
         # Outputs
-        return 0
+        return tf.zeros([batch_size], dtype=tf.float32)
 
 class AffineCouplingLayer(CouplingLayer):
     """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
     and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
 
-    
     def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super

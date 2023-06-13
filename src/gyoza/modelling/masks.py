@@ -29,12 +29,6 @@ class Mask(tf.keras.Model, ABC):
         self.__from_to__ = Mask.__compute_from_to__(mask=mask)
         """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
 
-        self.__mat_mul__ = tf.keras.layers.Dense(units=self.__from_to__.shape[0], use_bias=False, activation=None)
-        """(:class:`tensorflow.keras.layers.core.dense.Dense`) - A simple dense layer used for matrix multiplication."""
-
-        self.__mat_mul__.build(input_shape=[self.__from_to__.shape[0]])
-        self.__mat_mul__.set_weights([self.__from_to__])
-
     @staticmethod
     def __compute_from_to__(mask: tf.Tensor) -> tf.Tensor:
         """Sets up a matrix that can be used to arrange all elements of an input x (after flattening) such the ones marked with a 1 
@@ -61,7 +55,7 @@ class Mask(tf.keras.Model, ABC):
         # Outputs
         return from_to
 
-    def apply(self, x: tf.Tensor, is_positive: bool = True) -> tf.Tensor:
+    def call(self, x: tf.Tensor, is_positive: bool = True) -> tf.Tensor:
         """Applies the binary mask of self to ``x``.
 
         :param x: The data to be masked. The expected shape of ``x`` depends on the axis and shape specified during initialization.
@@ -71,7 +65,7 @@ class Mask(tf.keras.Model, ABC):
         :type is_positive: bool, optional
         :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
         """
-
+        
         # Parity
         if is_positive: mask = self.__mask__
         else: mask = 1 - self.__mask__
@@ -104,7 +98,7 @@ class Mask(tf.keras.Model, ABC):
         x = utt.swop_axes(x=x, from_axis=self.__axes__[0], to_axis=-1)
 
         # Matrix multiply
-        x_new = self.__mat_mul__(x[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
+        x_new = tf.linalg.matvec(tf.transpose(self.__from_to__, perm=[1,0]), x)
 
         # Move final axis to self.__axis__[0]
         x_new = utt.swop_axes(x=x_new, from_axis=-1, to_axis=self.__axes__[0])
@@ -123,15 +117,9 @@ class Mask(tf.keras.Model, ABC):
         # Move self.__axes__[0] to end
         x_new = utt.swop_axes(x=x_new, from_axis=self.__axes__[0], to_axis=-1)
         
-        # To invert arrange, we transpose multiplication with self.__from_to__
-        self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
-        
         # Matrix multiply
-        x = self.__mat_mul__(x_new[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
-
-        # Undo the change to satistfy postcondition == precondition
-        self.__mat_mul__.set_weights([self.__from_to__])
-
+        x = tf.linalg.matvec(self.__from_to__, x_new)
+        
         # Move final axis to self.__axis__[0]
         x = utt.swop_axes(x=x, from_axis=-1, to_axis=self.__axes__[0])
 

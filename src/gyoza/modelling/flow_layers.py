@@ -116,6 +116,13 @@ class CouplingLayer(FlowLayer, ABC):
         self.__mask__ = mask
         """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
 
+    def get_config(self):
+        return {
+            'compute_coupling_parameters': self.compute_coupling_parameters,
+            '__mask__': self.__mask__
+        }
+
+
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
         """Determines whether the parameters are valid for coupling.
@@ -142,7 +149,7 @@ class CouplingLayer(FlowLayer, ABC):
     def call(self, x: tf.Tensor) -> tf.Tensor:
 
         # Split x
-        x_1 = self.__mask__.apply(x=x)
+        x_1 = self.__mask__.call(x=x)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(x_1)
@@ -150,7 +157,7 @@ class CouplingLayer(FlowLayer, ABC):
 
         # Couple
         y_hat_1 = x_1
-        y_hat_2 = self.__mask__.apply(x=self.__couple__(x=x, parameters=coupling_parameters), is_positive=False)
+        y_hat_2 = self.__mask__.call(x=self.__couple__(x=x, parameters=coupling_parameters), is_positive=False)
 
         # Combine
         y_hat = y_hat_1 + y_hat_2
@@ -185,7 +192,7 @@ class CouplingLayer(FlowLayer, ABC):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Split
-        y_hat_1 = self.__mask__.apply(x=y_hat)
+        y_hat_1 = self.__mask__.call(x=y_hat)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(y_hat_1)
@@ -193,7 +200,7 @@ class CouplingLayer(FlowLayer, ABC):
         
         # Decouple
         x_1 = y_hat_1
-        x_2 = self.__mask__.apply(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), is_positive=False)
+        x_2 = self.__mask__.call(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), is_positive=False)
 
         # Combine
         x = x_1 + x_2
@@ -278,7 +285,7 @@ class AffineCouplingLayer(CouplingLayer):
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Split x
-        x_1 = self.__mask__.apply(x=x)
+        x_1 = self.__mask__.call(x=x)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(x_1)

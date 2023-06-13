@@ -4,13 +4,13 @@ from typing import List
 def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
     """Moves an axis from from_index to to_index.
     
-    Inputs:
-    - x: A tensor of shape [..., k, ...] where k is at from_index.
-    - from_index: The index of the axis before transposition.
-    - to_index: The index of the axis after transposition.
-    
-    Outputs:
-    - x_new: The tensor x transposed such that shape [..., k, ...] is now at to_index."""
+    :param x: A tensor of shape [..., k, ...] where k is at from_index.
+    :type x: :class:`tensorflow.Tensor`
+    :param from_index: The index of the axis before transposition.
+    :type from_index: int
+    :param to_index: The index of the axis after transposition.
+    :type to_index: int
+    :return: x_new (:class:`tensorflow.Tensor`): The tensor x transposed such that shape [..., k, ...] is now at to_index."""
  
     # Move axis
     new_order = list(range(len(x.shape)))
@@ -81,7 +81,7 @@ def swop_axes(x: tf.Tensor, from_axis: int, to_axis: int) -> tf.Tensor:
     """Swops axes of ``x``.
     
     :param x: The input whose axes shall be swopped. Assumed to have at least as many axes as indicated by 
-        ``from_axis`` and ``to_axis''.
+        ``from_axis`` and ``to_axis``.
     :type x: :class:`tensorflow.Tensor`
     :param from_axis: The axes to be swopped with ``to_axis``.
     :type from_axis: int

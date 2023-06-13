@@ -19,9 +19,10 @@ ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.to
 cd to docs directory, run make html
 
 Uploading to pypi
-pip install -e .
+
 change version number in pyproject.toml
 and include all new libraries in pyproject.toml (same as in requirements)
+pip install -e .
 python -m build
 python -m twine upload dist/*
 user_name __token__

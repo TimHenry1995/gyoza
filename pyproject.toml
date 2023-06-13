@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "gyoza"
-version = "0.0.4"
+version = "0.0.5"
 authors = [
   { name="Tim Dick", email="timdi@icloud.com" },
 ]
@@ -24,7 +24,7 @@ dependencies = [
     "matplotlib >= 3.5.3",
     "sphinx == 5.2.3",
     "sphinx-rtd-theme",
-    "numpy >= 1.23.5"
+    "numpy >= 1.21.6"
 ]
 
 [project.urls]

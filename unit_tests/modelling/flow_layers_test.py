@@ -4,6 +4,7 @@ import tensorflow as tf, numpy as np
 import gyoza.modelling.standard_layers as msl
 import gyoza.modelling.masks as mms
 from tensorflow.python.ops.parallel_for.gradients import jacobian
+import os, shutil
 
 class TestAdditiveCoupling(unittest.TestCase):
     
@@ -343,6 +344,65 @@ class TestAdditiveCoupling(unittest.TestCase):
         for j in range(J.shape[0]):
              self.assertEqual(first=x_observed[j], second=np.log(np.linalg.det(J[j].numpy())))
 
+class TestShuffle(unittest.TestCase):
+
+    def test_call_and_inverse(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call."""
+        
+        # Initialize
+        channel_count = 100
+        shuffling_layer = mfl.Shuffle(channel_count=channel_count, channel_axis=1)
+        x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
+        
+        # Observe
+        y_hat = shuffling_layer(x=x)
+        x_hat = shuffling_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+    def test_call_reliability(self):
+        """Tests whether call reproduces itself when called 2 times in a row."""
+        
+        # Initialize
+        channel_count = 100
+        shuffling_layer = mfl.Shuffle(channel_count=channel_count, channel_axis=1)
+        x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
+        
+        # Observe
+        y_hat_1 = shuffling_layer(x=x)
+        y_hat_2 = shuffling_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
+        self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
+
+
+    def test_load_and_save(self):
+        """Tests whether the model provides the same shuffling after persistent storage."""
+        # Initialize
+        channel_count = 100
+        shuffling_layer = mfl.Shuffle(channel_count=channel_count, channel_axis=1)
+        x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
+        
+        # Observe first
+        y_hat_1 = shuffling_layer(x=x)
+        
+        # Save and load
+        path = os.path.join(os.getcwd(), "temporary_model_directory_for_shuffle_model_unit_test")
+        shuffling_layer.save(path)
+        del shuffling_layer
+        loaded_shuffling_layer = tf.keras.models.load_model(path, compile=False)
+        shutil.rmtree(path)
+    
+        y_hat_2 = loaded_shuffling_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
+        self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
+
+
 if __name__ == "__main__":
-    #unittest.main()
-    TestAdditiveCoupling().test_call_triangular_jacobian_4_dimensional_input_square_wave_2_d_mask()
+    unittest.main()
+    

@@ -65,7 +65,7 @@ class Shuffle(FlowLayer):
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Shuffle
-        y_hat = tf.gather(x, self.permutation, axis=self.__axis__)
+        y_hat = tf.gather(x, self.__forward_permutation__, axis=self.__axis__)
         
         # Outputs
         return y_hat
@@ -127,7 +127,7 @@ class CouplingLayer(FlowLayer, ABC):
         """Determines whether the parameters are valid for coupling.
        
         :param parameters: The parameters to be checked.
-        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensor]`
+        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensor`]
         """
 
         # Assertion
@@ -177,7 +177,7 @@ class CouplingLayer(FlowLayer, ABC):
         :type x: :class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``x``. It's shape is assumed to support the 
             Hadamard product with ``x``.
-        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
+        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensow`]
         :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``x``."""
 
         raise NotImplementedError()
@@ -189,7 +189,7 @@ class CouplingLayer(FlowLayer, ABC):
         :type y_hat: :class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It's shape is assumed to support the 
             Hadamard product with ``x``.
-        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
+        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensow`]
         :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``y_hat``."""
 
         raise NotImplementedError()
@@ -414,20 +414,29 @@ class ActivationNormalization(FlowLayer):
         return logarithmic_determinant
 
 class SequentialFlowNetwork(FlowLayer):
-    """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way."""
+    """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way.
+    
+    :param sequence: A list of layers.
+    :type sequence: List[:class:`FlowLayer`]
+    """
 
-    def __init__(self, layers: List[FlowLayer]):
+    def __init__(self, sequence: List[FlowLayer]):
         
         # Super
         super(SequentialFlowNetwork, self).__init__()
         
         # Attributes
-        self.layers = layers
+        self.sequence = sequence
 
+    def get_config(self):
+        return {
+            'sequence': self.sequence
+        }
+    
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Transform
-        for layer in self.layers: x = layer(x=x)
+        for layer in self.sequence: x = layer(x=x)
         y_hat = x
 
         # Outputs
@@ -436,7 +445,7 @@ class SequentialFlowNetwork(FlowLayer):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Transform
-        for layer in self.layers: y_hat = layer.inverse(x=y_hat)
+        for layer in self.sequence: y_hat = layer.inverse(x=y_hat)
         x = y_hat
 
         # Outputs
@@ -446,7 +455,7 @@ class SequentialFlowNetwork(FlowLayer):
         
         # Transform
         logarithmic_determinant = 0
-        for layer in self.layers: 
+        for layer in self.sequence: 
             logarithmic_determinant += layer.compute_jacobian_determinant(x=x) 
             x = layer(x=x)
             

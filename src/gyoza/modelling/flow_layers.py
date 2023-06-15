@@ -111,7 +111,7 @@ class CouplingLayer(FlowLayer, ABC):
         super(CouplingLayer, self).__init__()
 
         # Attributes
-        self.compute_coupling_parameters = compute_coupling_parameters
+        self.__compute_coupling_parameters__ = compute_coupling_parameters
         
         self.__mask__ = mask
         """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
@@ -121,7 +121,6 @@ class CouplingLayer(FlowLayer, ABC):
             'compute_coupling_parameters': self.compute_coupling_parameters,
             '__mask__': self.__mask__
         }
-
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -144,7 +143,13 @@ class CouplingLayer(FlowLayer, ABC):
         :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product
             with ``x``."""
         
-        raise NotImplementedError()
+        # Propagate
+        # Here we can not guarantee that the provided function uses x as name for first input.
+        # We thus cannot use keyword input x=x. We have to trust that the first input is correctly interpreted as x.
+        y_hat = self.__compute_coupling_parameters__(x)
+
+        # Outputs
+        return y_hat
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
 
@@ -209,7 +214,7 @@ class CouplingLayer(FlowLayer, ABC):
         return x
     
 class AdditiveCouplingLayer(CouplingLayer):
-    """This couplign layer implements an additive coupling of the form y = x + parameters"""
+    """This coupling layer implements an additive coupling of the form y = x + parameters"""
 
     def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         

@@ -8,13 +8,13 @@ class Mask(tf.keras.Model, ABC):
     """This class can be used to curate elements of a tensor x. As suggested by the name semi, half of x is selected
     while the other half is not."""
 
-    def __init__(self, axes: List[int], mask: tf.Variable):
+    def __init__(self, axes: List[int], mask: tf.Tensor):
         """Constructor for this class. Subclasses can use it to store attributes.
         
         :param axes: The axes along which the selection shall be applied.
         :type axes: :class:`List[int]`
-        :param mask: The mask to be applied to data passing through this layer. It should be an untrainable tensorflow Variable.
-        :type mask: :class:`tensorflow.Variable`
+        :param mask: The mask to be applied to data passing through this layer. 
+        :type mask: :class:`tensorflow.Tensor`
         """
 
         # Super
@@ -23,7 +23,7 @@ class Mask(tf.keras.Model, ABC):
         self.__axes__ = axes
         """(:class:List[int]`) - The axes along which the selection shall be applied."""
 
-        self.__mask__ = mask
+        self.__mask__ = tf.constant(mask, dtype=tf.float32)
         """(:class:`tensorflow.Tensor) - The mask to be applied to data passing through this layer."""
 
         self.__from_to__ = Mask.__compute_from_to__(mask=mask)
@@ -50,7 +50,7 @@ class Mask(tf.keras.Model, ABC):
         # Set up matrix
         from_to = np.zeros(shape=[mask.shape[0],mask.shape[0]]) # Square matrix
         from_to[from_indices, to_indices] = 1
-        from_to = tf.Variable(from_to, dtype=tf.float32)
+        from_to = tf.constant(from_to, dtype=tf.float32)
 
         # Outputs
         return from_to
@@ -147,9 +147,9 @@ class HeaviSide(Mask):
         assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
 
         # Set up mask
-        mask = np.ones(shape, dtype=np.float32)
+        mask = np.ones(shape=shape)
         mask[:shape[0] // 2] = 0
-        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
+        mask = tf.constant(mask, dtype=tf.float32) 
 
         # Super
         super(HeaviSide, self).__init__(axes=axes, mask=mask)
@@ -171,9 +171,9 @@ class SquareWave1D(Mask):
         assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
 
         # Set up mask
-        mask = np.ones(shape)
+        mask = np.ones(shape=shape)
         mask[::2] = 0
-        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
+        mask = tf.constant(mask) 
 
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
@@ -198,7 +198,7 @@ class SquareWave2D(Mask):
         mask = np.ones(shape) 
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
-        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
+        mask = tf.constant(mask) 
         
         # Super
         super(SquareWave2D, self).__init__(axes=axes, mask=mask)

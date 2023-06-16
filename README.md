@@ -2,13 +2,16 @@
 ## A package for building invertible neural networks
 
 ## Download
-https://pypi.org/project/gyoza/
+As this package is distributed via [PyPI](https://pypi.org/project/gyoza/) it can be installed using:
+```
+pip install gyoza
+```
 
 ## Documentation
-https://gyoza.readthedocs.io/en/latest/modules.html
+Detailed documentation can be found on the companion websote of [read-the-docs](https://gyoza.readthedocs.io/en/latest/modules.html)
 
 ## Development
-https://github.com/TimHenry1995/gyoza
+Developers can access the package via [GitHub](https://github.com/TimHenry1995/gyoza)
 
 ## Tutorial
 

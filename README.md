@@ -16,7 +16,7 @@ Developers can access the package via [GitHub](https://github.com/TimHenry1995/g
 ## Tutorial
 
 ### Creating Models
-Models of this package can be created in the same way as tensorflow models. Consider the following example
+Flow models can be created in the same way as [tensorflow models](https://keras.io/api/models/model/). Consider the following example
 ```
 def create_model(channel_count: int = 5) -> msl.FlowLayer:
 

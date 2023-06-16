@@ -69,9 +69,11 @@ def flatten_along_axes(x: tf.Tensor, axes: List[int]) -> tf.Tensor:
 
     # Reshape
     new_shape = list(x.shape)
-    new_shape[axes[0]] = tf.reduce_prod(x.shape[axes[0]:axes[-1]+1]).numpy()
-    for a in axes[1:]:
-        del new_shape[a]
+
+    new_shape[axes[0]] = 1
+    for a in axes: new_shape[axes[0]] *= x.shape[a]
+    for a in axes[1:]: del new_shape[a]
+
     x_new = tf.reshape(x, new_shape) # Now has original shape except for axes which have been flattened
 
     # Outputs

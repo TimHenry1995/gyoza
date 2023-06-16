@@ -4,7 +4,7 @@ import tensorflow as tf, numpy as np
 import gyoza.modelling.standard_layers as msl
 import gyoza.modelling.masks as mms
 from tensorflow.python.ops.parallel_for.gradients import jacobian
-import os, shutil
+import os
 
 class TestAdditiveCoupling(unittest.TestCase):
     
@@ -14,7 +14,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = tf.keras.models.Sequential([tf.keras.layers.Dense(units=5, activation='tanh')])
         mask = mms.HeaviSide(axes=[0], shape=[5]) # Heaviside mask
-        mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        mfl.AdditiveCouplingLayer(axes=[0], shape=[5], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def test_init_2_dimensional(self):
         """Tests whether an instance of AdditiveCouplingLayer can be created for a 2-dimensional coupling."""
@@ -23,7 +23,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         compute_coupling_parameters = msl.ChannelWiseConvolution2D(layer_count=1, conv2D_kwargs={'filters':1, 'kernel_size':2, 'padding':'same', 'activation':'tanh'}) 
         
         mask = mms.SquareWave2D(axes=[0,1], shape=[2,5]) 
-        mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        mfl.AdditiveCouplingLayer(axes=[0,1], shape=[2,5],compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def test_call_1_dimensional(self):
         """Tests whether the call method of AdditiveCouplingLayer can do 1-dimensional coupling."""
@@ -31,7 +31,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
         mask = mms.HeaviSide(axes=[1],shape=[4])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(shape=[4], axes=[1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,4,3])
 
         # Target
@@ -52,7 +52,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
         mask = mms.SquareWave2D(axes=[1,2], shape=[2,4])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.float32), [1,2,4,3])
 
         # Target
@@ -74,7 +74,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
         mask = mms.HeaviSide(axes=[1], shape=[4])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1], shape=[4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,4,3])
         y_hat = x.numpy()
         y_hat[:,:2,:] += 1
@@ -96,7 +96,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
         mask = mms.SquareWave2D(axes=[1,2], shape=[2,4])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.float32), [1,2,4,3])
         y_hat = x.numpy()
         y_hat[0,0,::2,:] +=1
@@ -122,7 +122,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Dense(units=5),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
         mask = mms.HeaviSide(axes=[0], shape=[5])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[0], shape=[5], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.range(0,5,dtype=tf.float32)
 
         # Compute jacobian
@@ -150,7 +150,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
         mask = mms.HeaviSide(axes=[1], shape=[7])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
 
         # Compute jacobian
@@ -181,7 +181,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
         mask = mms.SquareWave1D(axes=[1], shape=[7])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
 
         # Compute jacobian
@@ -212,7 +212,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
         mask = mms.SquareWave2D(axes=[0,1], shape=[2,7])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[0,1], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
 
         # Compute jacobian
@@ -237,7 +237,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
         mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
         # Compute jacobian
@@ -270,7 +270,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
         mask = mms.SquareWave1D(axes=[1], shape=[7])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
 
         # Observe
@@ -297,7 +297,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
         mask = mms.SquareWave2D(axes=[0,1], shape=[2,7])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[0,1], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
 
         # Observe
@@ -322,7 +322,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
         mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
-        layer = mfl.AdditiveCouplingLayer(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        layer = mfl.AdditiveCouplingLayer(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
         # Observe
@@ -344,6 +344,40 @@ class TestAdditiveCoupling(unittest.TestCase):
         for j in range(J.shape[0]):
              self.assertEqual(first=x_observed[j], second=np.log(np.linalg.det(J[j].numpy())))
 
+
+    def test_load_and_save(self):
+
+        """Tests whether the model provides the same shuffling after persistent storage."""
+        # Initialize
+        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
+        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        layer = mfl.AdditiveCouplingLayer(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
+
+        # Observe first
+        y_hat_1 = layer(x=x)
+        
+        # Save and delete
+        path = os.path.join(os.getcwd(), "temporary_model_directory_for_additive_coupling_layer_unit_test.h5")
+        layer.save_weights(path)
+        del layer, mask, compute_coupling_parameters
+        
+        # Initialize again and load
+        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
+        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        loaded_layer = mfl.AdditiveCouplingLayer(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        loaded_layer(x) # Warm-up phase to initialize all weights
+        loaded_layer.load_weights(path)
+        os.remove(path)
+    
+        # Observe second
+        y_hat_2 = loaded_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
+        self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
+
+
 class TestShuffle(unittest.TestCase):
 
     def test_call_and_inverse(self):
@@ -351,7 +385,7 @@ class TestShuffle(unittest.TestCase):
         
         # Initialize
         channel_count = 100
-        shuffling_layer = mfl.Shuffle(channel_count=channel_count, channel_axis=1)
+        shuffling_layer = mfl.Shuffle(shape=[channel_count], axes=[1])
         x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
         
         # Observe
@@ -367,7 +401,7 @@ class TestShuffle(unittest.TestCase):
         
         # Initialize
         channel_count = 100
-        shuffling_layer = mfl.Shuffle(channel_count=channel_count, channel_axis=1)
+        shuffling_layer = mfl.Shuffle(shape=[channel_count], axes=[1])
         x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
         
         # Observe
@@ -378,23 +412,25 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
-
     def test_load_and_save(self):
+
         """Tests whether the model provides the same shuffling after persistent storage."""
+
         # Initialize
-        channel_count = 100
-        shuffling_layer = mfl.Shuffle(channel_count=channel_count, channel_axis=1)
+        channel_count = 101
+        shuffling_layer = mfl.Shuffle(shape=[channel_count], axes=[1])
         x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
         
         # Observe first
         y_hat_1 = shuffling_layer(x=x)
         
         # Save and load
-        path = os.path.join(os.getcwd(), "temporary_model_directory_for_shuffle_model_unit_test")
-        shuffling_layer.save(path)
+        path = os.path.join(os.getcwd(), "temporary_model_directory_for_shuffle_model_unit_test.h5")
+        shuffling_layer.save_weights(path)
         del shuffling_layer
-        loaded_shuffling_layer = tf.keras.models.load_model(path, compile=False)
-        shutil.rmtree(path)
+        loaded_shuffling_layer = mfl.Shuffle(shape=[channel_count], axes=[1])
+        loaded_shuffling_layer.load_weights(path)
+        os.remove(path)
     
         y_hat_2 = loaded_shuffling_layer(x=x)
 
@@ -404,5 +440,5 @@ class TestShuffle(unittest.TestCase):
 
 
 if __name__ == "__main__":
-    unittest.main()
-    
+    #unittest.main()
+    TestShuffle.test_load_and_save(None)

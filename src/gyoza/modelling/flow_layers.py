@@ -4,14 +4,46 @@ from typing import Any, Tuple, List, Callable
 from abc import ABC
 from gyoza.utilities import tensors as utt
 import gyoza.modelling.masks as mms
+import copy as cp
 
 class FlowLayer(tf.keras.Model, ABC):
-    """Abstract base class for flow layers
+    """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
+    initialization.
     
+    :param shape: The shape of the input that shall be transformed by this layer. If you have e.g. a tensor [batch size, width, 
+        height, channel count] and you want this layer to transform along width and height you enter [width, height] as shape. If you 
+        want the layer to operate on the channels you provide [channel count] instead.
+    :type shape: List[int]
+    :param axes: The axes of transformation. In the example for ``shape`` on width and height you would enter [1,2] here, In the 
+        example for channels you would enter [3] here. 
+    :type axes: List[int]
+
     References:
 
         - "Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio.
+        - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
+        - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh, David Krueger and Yoshua Bengio
+        - "GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images" by Aadhithya Sankar, Matthias Keicher, Rami Eisawy, Abhijeet Parida, Franz Pfister, Seong Tae Kim and  Nassir Navab1,6,†
+        - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
+
+    def __init__(self, shape: List[int], axes: List[int]):
+        """This constructor shall be used by subclasses only"""
+
+        # Super
+        super(FlowLayer, self).__init__()
+
+        # Input validity
+        assert len(shape) == len(axes), f"The input shape ({shape}) is expected to have as many entries as the input axes ({axes})."
+        for i in range(len(axes)-1):
+            assert axes[i] < axes[i+1], f"The axes in input axes ({axes}) are assumed to be strictly ascending"
+
+        # Attributes
+        self.__shape__ = cp.copy(shape)
+        """The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
+
+        self.__axes__ = cp.copy(axes)
+        """The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.
@@ -41,47 +73,67 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
+# TODO: make init adhere to requirement
 class Shuffle(FlowLayer):
-    """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen 
-    once during initialization. Thereafter it is saved as a non-trainable :class:`tensorflow.Variable` in a private attribute.
-    Shuffling is thus deterministic and supports persistence, e.g. via :py:meth:`tensorflow.keras.Model.load_weights` or :py:meth:`tensorflow.keras.Model.save_weights`.
-    
-    :param int channel_count: The number of channels that should be shuffled.
-    :param int channel_axis: The axis of shuffling."""
+    """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen once during initialization. 
+    Thereafter it is saved as a private attribute. Shuffling is thus deterministic and supports persistence, e.g. via 
+    :py:meth:`tensorflow.keras.models.load_model` or :py:meth:`tensorflow.keras.Model.save`.
+    """
 
-    def __init__(self, channel_count, channel_axis: int = -1):
+    def __init__(self, shape: List[int], axes: List[int]):
 
         # Super
-        super(Shuffle, self).__init__()
+        super(Shuffle, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__channel_count__ = channel_count
-        self.__axis__ = channel_axis
-        
-        permutation = tf.random.shuffle(tf.range(channel_count))
-        self.__forward_permutation__ = tf.Variable(permutation, trainable=False)
-        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False)
+        unit_count = tf.reduce_prod(shape).numpy()
+        permutation = tf.random.shuffle(tf.range(unit_count))
+        self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
+        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
+        self.built = True # This is needed for loading and saving
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
+        # Initialize
+        old_shape = x.shape
+
+        # Flatten along self.__axes__ to fit permutation matrix
+        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+
         # Shuffle
-        y_hat = tf.gather(x, self.__forward_permutation__, axis=self.__axis__)
+        y_hat = tf.gather(x, self.__forward_permutation__, axis=self.__axes__[0])
+
+        # Unflatten to restore original shape
+        x = tf.reshape(x, shape=old_shape)
         
         # Outputs
         return y_hat
     
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
+        # Initialize
+        old_shape = y_hat.shape
+
+        # Flatten along self.__axes__ to fit permutation matrix
+        y_hat = utt.flatten_along_axes(x=y_hat, axes=self.__axes__)
+
         # Shuffle
-        x = tf.gather(y_hat, self.__inverse_permutation__, axis=self.__axis__)
+        y_hat = tf.gather(y_hat, self.__inverse_permutation__, axis=self.__axes__[0])
+
+        # Unflatten to restore original shape
+        x = tf.reshape(y_hat, shape=old_shape)
         
         # Outputs
         return x
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
+        # Copmute
+        batch_size = x.shape[0]
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
+
         # Outputs
-        return 0
+        return logarithmic_determinant
 
 class CouplingLayer(FlowLayer, ABC):
     """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
@@ -93,6 +145,10 @@ class CouplingLayer(FlowLayer, ABC):
     :py:func:`compute_coupling_parameters` will only be evaluated in the forward direction, the overall :py:meth:`call` 
     method will be trivially invertible. Similarly, its Jacobian determinant remains trivial and thus tractable.
 
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
     :param compute_coupling_parameters: The function that shall be used to compute parameters. See the placeholder member
         :py:meth:`compute_coupling_parameters` for a detailed description of requirements.
     :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
@@ -105,22 +161,28 @@ class CouplingLayer(FlowLayer, ABC):
         - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
 
         # Super
-        super(CouplingLayer, self).__init__()
+        super(CouplingLayer, self).__init__(shape=shape, axes=axes)
+
+        # Input validity
+        shape_message = f"The shape ({shape}) provided to the coupling layer and that provided to the mask ({mask.__mask__.shape}) are expected to be the same."
+        assert len(shape) == len(mask.__mask__.shape), shape_message
+        for i in range(len(shape)):
+            assert shape[i] == mask.__mask__.shape[i], shape_message
+
+        axes_message = f"The axes ({axes}) provided to the coupling layer and that provided to the mask ({mask.__axes__}) are expected to be the same."
+        assert len(axes) == len(mask.__axes__), axes_message
+        for i in range(len(axes)):
+            assert axes[i] == mask.__axes__[i], axese_message
 
         # Attributes
         self.__compute_coupling_parameters__ = compute_coupling_parameters
+        """(Callable) used inside the wrapper :py:meth:`compute_coupling_parameters`"""
         
         self.__mask__ = mask
         """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
-
-    def get_config(self):
-        return {
-            'compute_coupling_parameters': self.compute_coupling_parameters,
-            '__mask__': self.__mask__
-        }
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -216,10 +278,10 @@ class CouplingLayer(FlowLayer, ABC):
 class AdditiveCouplingLayer(CouplingLayer):
     """This coupling layer implements an additive coupling of the form y = x + parameters"""
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AdditiveCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AdditiveCouplingLayer, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         
@@ -239,20 +301,21 @@ class AdditiveCouplingLayer(CouplingLayer):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
-        # Shape
+        # Copmute
         batch_size = x.shape[0]
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
 
         # Outputs
-        return tf.zeros([batch_size], dtype=tf.float32)
+        return logarithmic_determinant
 
 class AffineCouplingLayer(CouplingLayer):
     """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
     and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AffineCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AffineCouplingLayer, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -305,17 +368,12 @@ class AffineCouplingLayer(CouplingLayer):
         return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
-    """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance.
+    """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance."""
     
-    :param channel_count: The number of channels for which the transformation shall be executed.
-    :type channel_count: int
-    :param channel_axis: The axis along which the transformation shall be executed. Each entry along this axis will have 
-        its own transformation applied along all other axis."""
-
-    def __init__(self, channel_count: int, channel_axis: int = -1):
+    def __init__(self, shape: List[int], axes: List[int]):
 
         # Super
-        super().__init__()
+        super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
         
         # Attributes
         self.__location__ = tf.Variable(tf.zeros(channel_count), trainable=True)
@@ -327,8 +385,16 @@ class ActivationNormalization(FlowLayer):
         self.__is_initialized__ = False
         """An indicator for whether lazy initialization has been executed previously."""
 
-        self.__channel_axis__ = channel_axis
-        """The axis along which a data point shall be transformed."""
+    def get_config(self):
+
+        # Construct
+        config = super().get_config()
+        config['__location__'] = self.__location__
+        config['__scale__']: self.__scale__
+        config['__is_initialized__'] = self.__is_initialized__
+        
+        # Outputs
+        return config
 
     def __initialize__(self, x: tf.Tensor) -> None:
         """This method shall be used to lazily initialize the variables of self.
@@ -423,15 +489,19 @@ class SequentialFlowNetwork(FlowLayer):
     def __init__(self, sequence: List[FlowLayer]):
         
         # Super
-        super(SequentialFlowNetwork, self).__init__()
+        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[]) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
         
         # Attributes
         self.sequence = sequence
 
     def get_config(self):
-        return {
-            'sequence': self.sequence
-        }
+
+        # Construct
+        config = super().get_config()
+        config['sequence'] = self.sequence
+        
+        # Outputs
+        return config
     
     def call(self, x: tf.Tensor) -> tf.Tensor:
         

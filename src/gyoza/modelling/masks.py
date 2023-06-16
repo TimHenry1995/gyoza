@@ -29,6 +29,8 @@ class Mask(tf.keras.Model, ABC):
         self.__from_to__ = Mask.__compute_from_to__(mask=mask)
         """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
 
+        self.built = True # This is set to prevent a warning saying that serialzation for mask is skipped becuase mask is not built
+
     @staticmethod
     def __compute_from_to__(mask: tf.Tensor) -> tf.Tensor:
         """Sets up a matrix that can be used to arrange all elements of an input x (after flattening) such the ones marked with a 1 
@@ -69,7 +71,7 @@ class Mask(tf.keras.Model, ABC):
         # Parity
         if is_positive: mask = self.__mask__
         else: mask = 1 - self.__mask__
-
+        
         # Reshape mask to fit x
         axes = list(range(len(x.shape)))
         for axis in self.__axes__: axes.remove(axis) 
@@ -173,7 +175,7 @@ class SquareWave1D(Mask):
         # Set up mask
         mask = np.ones(shape=shape)
         mask[::2] = 0
-        mask = tf.constant(mask) 
+        mask = tf.constant(mask, dtype=tf.float32) 
 
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
@@ -198,7 +200,7 @@ class SquareWave2D(Mask):
         mask = np.ones(shape) 
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
-        mask = tf.constant(mask) 
+        mask = tf.constant(mask, dtype=tf.float32) 
         
         # Super
         super(SquareWave2D, self).__init__(axes=axes, mask=mask)

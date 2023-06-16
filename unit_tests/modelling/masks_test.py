@@ -160,8 +160,8 @@ class TestHeaviSide(unittest.TestCase):
 
 
 class TestSquareWave1D(unittest.TestCase):
-
     def test_mask_one_dimensional_even_length(self):
+
         """Tests whether the mask method of SquareWave1D works on a 1 dimensional input of even length."""
 
         # Initialize

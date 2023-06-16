@@ -73,11 +73,9 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
-# TODO: make init adhere to requirement
 class Shuffle(FlowLayer):
-    """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen once during initialization. 
-    Thereafter it is saved as a private attribute. Shuffling is thus deterministic and supports persistence, e.g. via 
-    :py:meth:`tensorflow.keras.models.load_model` or :py:meth:`tensorflow.keras.Model.save`.
+    """Shuffles inputs along the given axes. The permutation used for shuffling is randomly chosen once during initialization. 
+    Thereafter it is saved as a private attribute. Shuffling is thus deterministic from there on.
     """
 
     def __init__(self, shape: List[int], axes: List[int]):
@@ -90,12 +88,11 @@ class Shuffle(FlowLayer):
         permutation = tf.random.shuffle(tf.range(unit_count))
         self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
         self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
-        self.built = True # This is needed for loading and saving
-
+        
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Initialize
-        old_shape = x.shape
+        old_shape = cp.copy(x.shape)
 
         # Flatten along self.__axes__ to fit permutation matrix
         x = utt.flatten_along_axes(x=x, axes=self.__axes__)
@@ -104,7 +101,7 @@ class Shuffle(FlowLayer):
         y_hat = tf.gather(x, self.__forward_permutation__, axis=self.__axes__[0])
 
         # Unflatten to restore original shape
-        x = tf.reshape(x, shape=old_shape)
+        y_hat = tf.reshape(y_hat, shape=old_shape)
         
         # Outputs
         return y_hat
@@ -135,7 +132,7 @@ class Shuffle(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
-class CouplingLayer(FlowLayer, ABC):
+class Coupling(FlowLayer, ABC):
     """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
     obtains two copies of x, referred to as x_1, x_2 using a binary mask and its negative (1-mask), respectively. The half x_1 
     is mapped to coupling parameters via a user-provided model, called :py:meth:``compute_coupling_parameters``. This can be e.g. an 
@@ -164,7 +161,7 @@ class CouplingLayer(FlowLayer, ABC):
     def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
 
         # Super
-        super(CouplingLayer, self).__init__(shape=shape, axes=axes)
+        super(Coupling, self).__init__(shape=shape, axes=axes)
 
         # Input validity
         shape_message = f"The shape ({shape}) provided to the coupling layer and that provided to the mask ({mask.__mask__.shape}) are expected to be the same."
@@ -275,13 +272,13 @@ class CouplingLayer(FlowLayer, ABC):
         # Outputs
         return x
     
-class AdditiveCouplingLayer(CouplingLayer):
+class AdditiveCoupling(Coupling):
     """This coupling layer implements an additive coupling of the form y = x + parameters"""
 
     def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AdditiveCouplingLayer, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         
@@ -308,14 +305,14 @@ class AdditiveCouplingLayer(CouplingLayer):
         # Outputs
         return logarithmic_determinant
 
-class AffineCouplingLayer(CouplingLayer):
+class AffineCoupling(Coupling):
     """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
     and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
 
     def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AffineCouplingLayer, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -368,7 +365,14 @@ class AffineCouplingLayer(CouplingLayer):
         return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
-    """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance."""
+    """A trainable location and scale transformation of the data. For each unit of the specified input shape, a scale and a location 
+    parameter is used. That is, if shape = [width, height] then 2 * width * height many parameters are used. Each pair of location and
+    scale is initialized to produce mean equal to 0 and variance equal to 1 for its unit. To allow for invertibility, the scale parameter 
+    has to be non-zero and is therefore chosen to be on an exponential scale. Each unit thus has the following activation 
+    normalization:
+    
+    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this unit, respectively.
+    """
     
     def __init__(self, shape: List[int], axes: List[int]):
 
@@ -376,55 +380,37 @@ class ActivationNormalization(FlowLayer):
         super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__location__ = tf.Variable(tf.zeros(channel_count), trainable=True)
+        self.__location__ = tf.Variable(tf.zeros(shape), trainable=True, name="__location__")
         """The value by which each data point shall be translated."""
 
-        self.__scale__ = tf.Variable(tf.ones(channel_count), trainable=True)
+        self.__scale__ = tf.Variable(tf.ones(shape), trainable=True, name="__scale__")
         """The value by which each data point shall be scaled."""
 
         self.__is_initialized__ = False
         """An indicator for whether lazy initialization has been executed previously."""
 
-    def get_config(self):
-
-        # Construct
-        config = super().get_config()
-        config['__location__'] = self.__location__
-        config['__scale__']: self.__scale__
-        config['__is_initialized__'] = self.__is_initialized__
-        
-        # Outputs
-        return config
-
-    def __initialize__(self, x: tf.Tensor) -> None:
+    def __lazy_init__(self, x: tf.Tensor) -> None:
         """This method shall be used to lazily initialize the variables of self.
         
         :param x: The data that is propagated through :py:meth:`call`.
         :type x: :class:`tensorflow.Tensor`"""
 
-        # Move the channel axis to the end
-        new_order = list(range(len(x.shape)))
-        a = new_order[self.__channel_axis__]; del new_order[self.__channel_axis__]; new_order.append(a)
-        x_new = tf.stop_gradient(tf.permute(x, new_order)) # Shape == [other axes , channel count]
+        # Move self.__axes__ to the end
+        for a, axis in enumerate(self.__axes__): x = utt.move_axis(x=x, from_index=axis-a, to_index=-1) # Relies on assumption that axes are ascending
 
-        # Flatten per channel
-        x_new = tf.stop_gradient(tf.reshape(x_new, [np.multiply(new_order[:-1]), -1])) # Shape == [product of all other axes, channel count]
+        # Flatten other axes
+        other_axes = list(range(len(x.shape)))
+        for axis in self.__axes__: other_axes.remove(axis)
+        x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes] + self.__shape__
 
-        # Compute mean and variance channel-wise
-        mean = tf.stop_gradient(tf.reduce_mean(x_new, axis=0)) # Shape == [channel count] 
-        variance = tf.stop_gradient(tf.math.reduce_variance(x_new, axis=0)) # Shape == [channel count]
+        # Compute mean and standard deviation 
+        mean = tf.stop_gradient(tf.math.reduce_mean(x, axis=0)) # Shape == self.__shape__ 
+        standard_deviation = tf.stop_gradient(tf.math.reduce_std(x, axis=0)) # Shape == self.__shape__ 
         
         # Update attributes
         self.__location__.assign(mean)
-        self.__scale__.assign(variance)
-
-    def __scale_to_non_zero__(self) -> None:
-        """Mutating method that corrects the :py:attr:`__scale__` attribute where it is equal to zero by adding a constant epsilon. 
-        This is useful to prevent scaling by 0 which is not invertible."""
-        
-        # Correct scale where it is equal to zero to prevent division by zero
-        epsilon = tf.stop_gradient(tf.constant(1e-6 * (self.__scale__.numpy() == 0), dtype=self.__scale__.dtype)) 
-        self.__scale__.assing(self.__scale__ + epsilon)
+        scale = tf.math.log(standard_deviation+1e-16) # To initialze it for unit variance we need to use log here
+        self.__scale__.assign(scale)
 
     def __prepare_variables_for_computation__(self, x:tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
         """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
@@ -435,9 +421,9 @@ class ActivationNormalization(FlowLayer):
             - location (tensorflow.Variable) - The :py:attr:`__location__` attribute shaped to fit ``x``. 
             - scale (tensorflow.Variable) - The :py:attr:`__scale__` attribute ensured to be non-zero and shaped to fit ``x``."""
 
-        # Preparations
-        self.__scale_to_non_zero__()
-        axes = list(range(len(x.shape))); axes.remove(self.__channel_axis__)
+        # Shape variables to fit x
+        axes = list(range(len(x.shape)))
+        for axis in self.__axes__: axes.remove(axis)
         location = utt.expand_axes(x=self.__location__, axes=axes)
         scale = utt.expand_axes(x=self.__scale__, axes=axes)
 
@@ -447,11 +433,11 @@ class ActivationNormalization(FlowLayer):
     def call(self, x: tf.Tensor) -> tf.Tensor:
 
         # Ensure initialization of variables
-        if not self.__is_initialized__: self.__initialize__(x=x)
+        if not self.__is_initialized__: self.__lazy_init__(x=x)
 
         # Transform
-        scale, location = self.__prepare_variables_for_computation__(x=x)
-        y_hat = (x-location) / (scale) 
+        location, scale = self.__prepare_variables_for_computation__(x=x)
+        y_hat = (x-location) / (tf.math.exp(scale))
 
         # Outputs
         return y_hat
@@ -460,22 +446,27 @@ class ActivationNormalization(FlowLayer):
 
         # Transform
         scale, location = self.__prepare_variables_for_computation__(x=y_hat)
-        x = scale * y_hat + location
+        x = tf.math.exp(scale) * y_hat + location
 
         # Outputs
         return x
            
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Count elements per instance (ignoring channels)
-        instance_count = x.shape[0]
-        element_shape = x.shape; del element_shape[self.__channel_axis__]; del element_shape[0] # Shape ignoring instance and channel axes
-        element_count = tf.math.reduce_prod(element_shape)
+        # Count elements per instance 
+        batch_size = x.shape[0]
+        unit_count = 1
+        for axis in range(x.shape):
+            if axis != 0 and axis not in self.__axes__:
+                unit_count *= axis 
         
         # Compute logarithmic determinant
-        logarithmic_determinant = element_count * tf.math.reduce_sum(tf.math.log(1/(tf.abs(self.scale)))) # All channel for a single element 
-        logarithmic_determinant = tf.ones([instance_count], dtype=x.dtype)
-
+        # By defintion: sum across units for ln(1/scale), where scale = exp(self.__scale__)
+        # Rewriting to: sum across units for ln(0) - ln(scale)
+        # Rewriting to: -1 * sum across units for ln(scale)
+        # rewriting to -1 sum across units for ln(exp(self.__scale__)) which result in:
+        logarithmic_determinant = -1 * unit_count * tf.math.reduce_sum(self.__scale__) # All channel for a single unit 
+        
         # Outputs
         return logarithmic_determinant
 

@@ -50,6 +50,21 @@ class TestMoveAxis(unittest.TestCase):
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
 
+    def test_axes_1_minus_1(self):
+        """Test whether the move_axis function manages to move the axis from index 2 to 0."""
+
+        # Initialize
+        x = tf.reshape(tf.range(0,24), [1,2,3,4])
+
+        # Target
+        x_target = tf.transpose(x, [0,2,3,1])
+
+        # Observe
+        x_observed = utt.move_axis(x=x, from_index=1, to_index=-1)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+
 class TestExpandAxes(unittest.TestCase):
 
     def test_axes_0(self):
@@ -126,7 +141,6 @@ class TestExpandAxes(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-
 
 if __name__ == "__main__":
     unittest.main()

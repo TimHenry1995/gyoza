@@ -8,7 +8,7 @@ pip install gyoza
 ```
 
 ## Documentation
-Detailed documentation can be found on the companion websote of [read-the-docs](https://gyoza.readthedocs.io/en/latest/modules.html)
+Detailed documentation can be found on the companion website of [read-the-docs](https://gyoza.readthedocs.io/en/latest/modules.html)
 
 ## Development
 Developers can access the package via [GitHub](https://github.com/TimHenry1995/gyoza)

@@ -12,6 +12,10 @@ def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
     :type to_index: int
     :return: x_new (:class:`tensorflow.Tensor`): The tensor x transposed such that shape [..., k, ...] is now at to_index."""
  
+    # Input validity
+    if from_index == -1: from_index = len(x.shape)-1
+    if to_index == -1: to_index = len(x.shape)-1
+
     # Move axis
     new_order = list(range(len(x.shape)))
     del new_order[from_index]

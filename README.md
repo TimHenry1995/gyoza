@@ -27,3 +27,5 @@ new_model.build(input_shape=...) # Ensures model weights are initialized
 # Load weights
 new_model.load_weights(path)
 ```
+
+Serialization via the entire model, instead of the mere weights, via [save_model](https://www.tensorflow.org/api_docs/python/tf/keras/saving/save_model) and [load_model](https://www.tensorflow.org/api_docs/python/tf/keras/saving/load_model) methods is not supported by all layers of this package and thus deprecated.

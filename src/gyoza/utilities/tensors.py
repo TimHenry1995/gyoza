@@ -1,5 +1,6 @@
 import tensorflow as tf
 from typing import List
+import copy as cp
 
 def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
     """Moves an axis from from_index to to_index.
@@ -12,6 +13,10 @@ def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
     :type to_index: int
     :return: x_new (:class:`tensorflow.Tensor`): The tensor x transposed such that shape [..., k, ...] is now at to_index."""
  
+    # Input validity
+    if from_index == -1: from_index = len(x.shape)-1
+    if to_index == -1: to_index = len(x.shape)-1
+
     # Move axis
     new_order = list(range(len(x.shape)))
     del new_order[from_index]
@@ -67,11 +72,17 @@ def flatten_along_axes(x: tf.Tensor, axes: List[int]) -> tf.Tensor:
     :type axes: :class:`List[int]`
     :return: x_new (:class:`tensorflow.Tensor`) - The reshaped tensor ``x`` flattened along ``axes``."""
 
+    # Exception handling
+    if len(axes) == 0: return x
+
     # Reshape
     new_shape = list(x.shape)
-    new_shape[axes[0]] = tf.reduce_prod(x.shape[axes[0]:axes[-1]+1]).numpy()
-    for a in axes[1:]:
-        del new_shape[a]
+
+    new_shape[axes[0]] = 1
+    for a in axes: new_shape[axes[0]] *= x.shape[a]
+    axes = cp.copy(axes); axes.reverse()
+    for a in axes[:-1]: del new_shape[a]
+
     x_new = tf.reshape(x, new_shape) # Now has original shape except for axes which have been flattened
 
     # Outputs

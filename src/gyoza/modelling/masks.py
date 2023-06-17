@@ -8,13 +8,13 @@ class Mask(tf.keras.Model, ABC):
     """This class can be used to curate elements of a tensor x. As suggested by the name semi, half of x is selected
     while the other half is not."""
 
-    def __init__(self, axes: List[int], mask: tf.Variable):
+    def __init__(self, axes: List[int], mask: tf.Tensor):
         """Constructor for this class. Subclasses can use it to store attributes.
         
         :param axes: The axes along which the selection shall be applied.
         :type axes: :class:`List[int]`
-        :param mask: The mask to be applied to data passing through this layer. It should be an untrainable tensorflow Variable.
-        :type mask: :class:`tensorflow.Variable`
+        :param mask: The mask to be applied to data passing through this layer. 
+        :type mask: :class:`tensorflow.Tensor`
         """
 
         # Super
@@ -23,17 +23,13 @@ class Mask(tf.keras.Model, ABC):
         self.__axes__ = axes
         """(:class:List[int]`) - The axes along which the selection shall be applied."""
 
-        self.__mask__ = mask
+        self.__mask__ = tf.constant(mask, dtype=tf.float32)
         """(:class:`tensorflow.Tensor) - The mask to be applied to data passing through this layer."""
 
         self.__from_to__ = Mask.__compute_from_to__(mask=mask)
         """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
 
-        self.__mat_mul__ = tf.keras.layers.Dense(units=self.__from_to__.shape[0], use_bias=False, activation=None)
-        """(:class:`tensorflow.keras.layers.core.dense.Dense`) - A simple dense layer used for matrix multiplication."""
-
-        self.__mat_mul__.build(input_shape=[self.__from_to__.shape[0]])
-        self.__mat_mul__.set_weights([self.__from_to__])
+        self.built = True # This is set to prevent a warning saying that serialzation for mask is skipped becuase mask is not built
 
     @staticmethod
     def __compute_from_to__(mask: tf.Tensor) -> tf.Tensor:
@@ -56,12 +52,12 @@ class Mask(tf.keras.Model, ABC):
         # Set up matrix
         from_to = np.zeros(shape=[mask.shape[0],mask.shape[0]]) # Square matrix
         from_to[from_indices, to_indices] = 1
-        from_to = tf.Variable(from_to, dtype=tf.float32)
+        from_to = tf.constant(from_to, dtype=tf.float32)
 
         # Outputs
         return from_to
 
-    def apply(self, x: tf.Tensor, is_positive: bool = True) -> tf.Tensor:
+    def call(self, x: tf.Tensor, is_positive: bool = True) -> tf.Tensor:
         """Applies the binary mask of self to ``x``.
 
         :param x: The data to be masked. The expected shape of ``x`` depends on the axis and shape specified during initialization.
@@ -71,11 +67,11 @@ class Mask(tf.keras.Model, ABC):
         :type is_positive: bool, optional
         :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
         """
-
+        
         # Parity
         if is_positive: mask = self.__mask__
         else: mask = 1 - self.__mask__
-
+        
         # Reshape mask to fit x
         axes = list(range(len(x.shape)))
         for axis in self.__axes__: axes.remove(axis) 
@@ -104,7 +100,7 @@ class Mask(tf.keras.Model, ABC):
         x = utt.swop_axes(x=x, from_axis=self.__axes__[0], to_axis=-1)
 
         # Matrix multiply
-        x_new = self.__mat_mul__(x[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
+        x_new = tf.linalg.matvec(tf.transpose(self.__from_to__, perm=[1,0]), x)
 
         # Move final axis to self.__axis__[0]
         x_new = utt.swop_axes(x=x_new, from_axis=-1, to_axis=self.__axes__[0])
@@ -123,15 +119,9 @@ class Mask(tf.keras.Model, ABC):
         # Move self.__axes__[0] to end
         x_new = utt.swop_axes(x=x_new, from_axis=self.__axes__[0], to_axis=-1)
         
-        # To invert arrange, we transpose multiplication with self.__from_to__
-        self.__mat_mul__.set_weights([tf.transpose(self.__from_to__, perm=[1,0])])
-        
         # Matrix multiply
-        x = self.__mat_mul__(x_new[tf.newaxis])[0,:] # Use newaxis to ensure input has at least 2 axes which is required by dense layers
-
-        # Undo the change to satistfy postcondition == precondition
-        self.__mat_mul__.set_weights([self.__from_to__])
-
+        x = tf.linalg.matvec(self.__from_to__, x_new)
+        
         # Move final axis to self.__axis__[0]
         x = utt.swop_axes(x=x, from_axis=-1, to_axis=self.__axes__[0])
 
@@ -159,9 +149,9 @@ class HeaviSide(Mask):
         assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
 
         # Set up mask
-        mask = np.ones(shape, dtype=np.float32)
+        mask = np.ones(shape=shape)
         mask[:shape[0] // 2] = 0
-        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
+        mask = tf.constant(mask, dtype=tf.float32) 
 
         # Super
         super(HeaviSide, self).__init__(axes=axes, mask=mask)
@@ -183,9 +173,9 @@ class SquareWave1D(Mask):
         assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
 
         # Set up mask
-        mask = np.ones(shape)
+        mask = np.ones(shape=shape)
         mask[::2] = 0
-        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
+        mask = tf.constant(mask, dtype=tf.float32) 
 
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
@@ -210,7 +200,7 @@ class SquareWave2D(Mask):
         mask = np.ones(shape) 
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
-        mask = tf.Variable(initial_value=mask, trainable=False, dtype=tf.float32) 
+        mask = tf.constant(mask, dtype=tf.float32) 
         
         # Super
         super(SquareWave2D, self).__init__(axes=axes, mask=mask)

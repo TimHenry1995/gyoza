@@ -15,7 +15,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[0], shape=[10])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -32,7 +32,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[0], shape=[11])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -49,7 +49,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[1], shape=[5])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -66,7 +66,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[0], shape=[3])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -84,7 +84,7 @@ class TestHeaviSide(unittest.TestCase):
 
         # Observe
         instance = mms.HeaviSide(axes=[1], shape=[5])
-        x_observed = instance.apply(x=x, is_positive=False)
+        x_observed = instance.call(x=x, is_positive=False)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -160,8 +160,8 @@ class TestHeaviSide(unittest.TestCase):
 
 
 class TestSquareWave1D(unittest.TestCase):
-
     def test_mask_one_dimensional_even_length(self):
+
         """Tests whether the mask method of SquareWave1D works on a 1 dimensional input of even length."""
 
         # Initialize
@@ -174,7 +174,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[0], shape=[10])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -193,7 +193,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[1], shape=[5])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -212,7 +212,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[0], shape=[3])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -232,7 +232,7 @@ class TestSquareWave1D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave1D(axes=[1], shape=[5])
-        x_observed = instance.apply(x=x, is_positive=False)
+        x_observed = instance.call(x=x, is_positive=False)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -357,7 +357,7 @@ class TestSquareWave2D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave2D(axes=[0,1], shape=[3,5])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -378,7 +378,7 @@ class TestSquareWave2D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave2D(axes=[1,2], shape=[3,5])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -399,7 +399,7 @@ class TestSquareWave2D(unittest.TestCase):
 
         # Observe
         instance = mms.SquareWave2D(axes=[1,2], shape=[3,5])
-        x_observed = instance.apply(x=x)
+        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))

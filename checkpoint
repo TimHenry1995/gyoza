@@ -1,0 +1,2 @@
+model_checkpoint_path: "temporary_model_directory_for_shuffle_model_unit_test.tf"
+all_model_checkpoint_paths: "temporary_model_directory_for_shuffle_model_unit_test.tf"

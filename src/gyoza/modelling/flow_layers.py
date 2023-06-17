@@ -4,14 +4,48 @@ from typing import Any, Tuple, List, Callable
 from abc import ABC
 from gyoza.utilities import tensors as utt
 import gyoza.modelling.masks as mms
+import copy as cp
 
 class FlowLayer(tf.keras.Model, ABC):
-    """Abstract base class for flow layers
+    """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
+    initialization.
     
+    :param shape: The shape of the input that shall be transformed by this layer. If you have e.g. a tensor [batch size, width, 
+        height, channel count] and you want this layer to transform along width and height you enter [width, height] as shape. If you 
+        want the layer to operate on the channels you provide [channel count] instead.
+    :type shape: List[int]
+    :param axes: The axes of transformation. In the example for ``shape`` on width and height you would enter [1,2] here, In the 
+        example for channels you would enter [3] here. ``axes`` is assumed not to contain the axis 0, i.e. the batch axis.
+    :type axes: List[int]
+
     References:
 
         - "Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio.
+        - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
+        - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh, David Krueger and Yoshua Bengio
+        - "GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images" by Aadhithya Sankar, Matthias Keicher, Rami Eisawy, Abhijeet Parida, Franz Pfister, Seong Tae Kim and  Nassir Navab1,6,†
+        - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
+
+    def __init__(self, shape: List[int], axes: List[int]):
+        """This constructor shall be used by subclasses only"""
+
+        # Super
+        super(FlowLayer, self).__init__()
+
+        # Input validity
+        assert len(shape) == len(axes), f"The input shape ({shape}) is expected to have as many entries as the input axes ({axes})."
+        for i in range(len(axes)-1):
+            assert axes[i] < axes[i+1], f"The axes in input axes ({axes}) are assumed to be strictly ascending"
+
+        assert 0 not in axes, f"The input axes ({axes}) must not contain the batch axis, i.e. 0."
+
+        # Attributes
+        self.__shape__ = cp.copy(shape)
+        """The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
+
+        self.__axes__ = cp.copy(axes)
+        """The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.
@@ -42,48 +76,65 @@ class FlowLayer(tf.keras.Model, ABC):
         raise NotImplementedError()
 
 class Shuffle(FlowLayer):
-    """Shuffles inputs along a given axis. The permutation used for shuffling is randomly chosen 
-    once during initialization. Thereafter it is saved as a non-trainable :class:`tensorflow.Variable` in a private attribute.
-    Shuffling is thus deterministic and supports persistence, e.g. via :py:meth:`tensorflow.keras.Model.load_weights` or :py:meth:`tensorflow.keras.Model.save_weights`.
-    
-    :param int channel_count: The number of channels that should be shuffled.
-    :param int channel_axis: The axis of shuffling."""
+    """Shuffles inputs along the given axes. The permutation used for shuffling is randomly chosen once during initialization. 
+    Thereafter it is saved as a private attribute. Shuffling is thus deterministic from there on.
+    """
 
-    def __init__(self, channel_count, channel_axis: int = -1):
+    def __init__(self, shape: List[int], axes: List[int]):
 
         # Super
-        super(Shuffle, self).__init__()
+        super(Shuffle, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__channel_count__ = channel_count
-        self.__axis__ = channel_axis
+        unit_count = tf.reduce_prod(shape).numpy()
+        permutation = tf.random.shuffle(tf.range(unit_count))
+        self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
+        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
         
-        permutation = tf.random.shuffle(tf.range(channel_count))
-        self.__forward_permutation__ = tf.Variable(permutation, trainable=False)
-        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False)
-
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
+        # Initialize
+        old_shape = cp.copy(x.shape)
+
+        # Flatten along self.__axes__ to fit permutation matrix
+        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+
         # Shuffle
-        y_hat = tf.gather(x, self.permutation, axis=self.__axis__)
+        y_hat = tf.gather(x, self.__forward_permutation__, axis=self.__axes__[0])
+
+        # Unflatten to restore original shape
+        y_hat = tf.reshape(y_hat, shape=old_shape)
         
         # Outputs
         return y_hat
     
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
+        # Initialize
+        old_shape = y_hat.shape
+
+        # Flatten along self.__axes__ to fit permutation matrix
+        y_hat = utt.flatten_along_axes(x=y_hat, axes=self.__axes__)
+
         # Shuffle
-        x = tf.gather(y_hat, self.__inverse_permutation__, axis=self.__axis__)
+        y_hat = tf.gather(y_hat, self.__inverse_permutation__, axis=self.__axes__[0])
+
+        # Unflatten to restore original shape
+        x = tf.reshape(y_hat, shape=old_shape)
         
         # Outputs
         return x
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Outputs
-        return 0
+        # Copmute
+        batch_size = x.shape[0]
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
 
-class CouplingLayer(FlowLayer, ABC):
+        # Outputs
+        return logarithmic_determinant
+
+class Coupling(FlowLayer, ABC):
     """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
     obtains two copies of x, referred to as x_1, x_2 using a binary mask and its negative (1-mask), respectively. The half x_1 
     is mapped to coupling parameters via a user-provided model, called :py:meth:``compute_coupling_parameters``. This can be e.g. an 
@@ -93,6 +144,10 @@ class CouplingLayer(FlowLayer, ABC):
     :py:func:`compute_coupling_parameters` will only be evaluated in the forward direction, the overall :py:meth:`call` 
     method will be trivially invertible. Similarly, its Jacobian determinant remains trivial and thus tractable.
 
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
     :param compute_coupling_parameters: The function that shall be used to compute parameters. See the placeholder member
         :py:meth:`compute_coupling_parameters` for a detailed description of requirements.
     :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
@@ -105,13 +160,25 @@ class CouplingLayer(FlowLayer, ABC):
         - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
 
         # Super
-        super(CouplingLayer, self).__init__()
+        super(Coupling, self).__init__(shape=shape, axes=axes)
+
+        # Input validity
+        shape_message = f"The shape ({shape}) provided to the coupling layer and that provided to the mask ({mask.__mask__.shape}) are expected to be the same."
+        assert len(shape) == len(mask.__mask__.shape), shape_message
+        for i in range(len(shape)):
+            assert shape[i] == mask.__mask__.shape[i], shape_message
+
+        axes_message = f"The axes ({axes}) provided to the coupling layer and that provided to the mask ({mask.__axes__}) are expected to be the same."
+        assert len(axes) == len(mask.__axes__), axes_message
+        for i in range(len(axes)):
+            assert axes[i] == mask.__axes__[i], axese_message
 
         # Attributes
-        self.compute_coupling_parameters = compute_coupling_parameters
+        self.__compute_coupling_parameters__ = compute_coupling_parameters
+        """(Callable) used inside the wrapper :py:meth:`compute_coupling_parameters`"""
         
         self.__mask__ = mask
         """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
@@ -121,7 +188,7 @@ class CouplingLayer(FlowLayer, ABC):
         """Determines whether the parameters are valid for coupling.
        
         :param parameters: The parameters to be checked.
-        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensor]`
+        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensor`]
         """
 
         # Assertion
@@ -137,12 +204,18 @@ class CouplingLayer(FlowLayer, ABC):
         :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product
             with ``x``."""
         
-        raise NotImplementedError()
+        # Propagate
+        # Here we can not guarantee that the provided function uses x as name for first input.
+        # We thus cannot use keyword input x=x. We have to trust that the first input is correctly interpreted as x.
+        y_hat = self.__compute_coupling_parameters__(x)
+
+        # Outputs
+        return y_hat
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
 
         # Split x
-        x_1 = self.__mask__.apply(x=x)
+        x_1 = self.__mask__.call(x=x)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(x_1)
@@ -150,7 +223,7 @@ class CouplingLayer(FlowLayer, ABC):
 
         # Couple
         y_hat_1 = x_1
-        y_hat_2 = self.__mask__.apply(x=self.__couple__(x=x, parameters=coupling_parameters), is_positive=False)
+        y_hat_2 = self.__mask__.call(x=self.__couple__(x=x, parameters=coupling_parameters), is_positive=False)
 
         # Combine
         y_hat = y_hat_1 + y_hat_2
@@ -165,7 +238,7 @@ class CouplingLayer(FlowLayer, ABC):
         :type x: :class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``x``. It's shape is assumed to support the 
             Hadamard product with ``x``.
-        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
+        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensow`]
         :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``x``."""
 
         raise NotImplementedError()
@@ -177,7 +250,7 @@ class CouplingLayer(FlowLayer, ABC):
         :type y_hat: :class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It's shape is assumed to support the 
             Hadamard product with ``x``.
-        :type parameters: :class:`tensorflow.Tensor` or :class:`List[tensorflow.Tensow]`
+        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensow`]
         :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``y_hat``."""
 
         raise NotImplementedError()
@@ -185,7 +258,7 @@ class CouplingLayer(FlowLayer, ABC):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Split
-        y_hat_1 = self.__mask__.apply(x=y_hat)
+        y_hat_1 = self.__mask__.call(x=y_hat)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(y_hat_1)
@@ -193,7 +266,7 @@ class CouplingLayer(FlowLayer, ABC):
         
         # Decouple
         x_1 = y_hat_1
-        x_2 = self.__mask__.apply(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), is_positive=False)
+        x_2 = self.__mask__.call(x=self.__decouple__(y_hat=y_hat, parameters=coupling_parameters), is_positive=False)
 
         # Combine
         x = x_1 + x_2
@@ -201,13 +274,13 @@ class CouplingLayer(FlowLayer, ABC):
         # Outputs
         return x
     
-class AdditiveCouplingLayer(CouplingLayer):
-    """This couplign layer implements an additive coupling of the form y = x + parameters"""
+class AdditiveCoupling(Coupling):
+    """This coupling layer implements an additive coupling of the form y = x + parameters"""
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AdditiveCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         
@@ -227,20 +300,21 @@ class AdditiveCouplingLayer(CouplingLayer):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
-        # Shape
+        # Copmute
         batch_size = x.shape[0]
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
 
         # Outputs
-        return tf.zeros([batch_size], dtype=tf.float32)
+        return logarithmic_determinant
 
-class AffineCouplingLayer(CouplingLayer):
+class AffineCoupling(Coupling):
     """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
     and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
 
-    def __init__(self, compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
         
         # Super
-        super(AffineCouplingLayer, self).__init__(compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -278,7 +352,7 @@ class AffineCouplingLayer(CouplingLayer):
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Split x
-        x_1 = self.__mask__.apply(x=x)
+        x_1 = self.__mask__.call(x=x)
 
         # Compute parameters
         coupling_parameters = self.compute_coupling_parameters(x_1)
@@ -293,60 +367,61 @@ class AffineCouplingLayer(CouplingLayer):
         return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
-    """A trainable channel-wise location and scale transform of the data. Is initialized to produce zero mean and unit variance.
+    """A trainable location and scale transformation of the data. For each unit of the specified input shape, a scale and a location 
+    parameter is used. That is, if shape = [width, height] then 2 * width * height many parameters are used. Each pair of location and
+    scale is initialized to produce mean equal to 0 and variance equal to 1 for its unit. To allow for invertibility, the scale parameter 
+    has to be non-zero and is therefore chosen to be on an exponential scale. Each unit thus has the following activation 
+    normalization:
     
-    :param channel_count: The number of channels for which the transformation shall be executed.
-    :type channel_count: int
-    :param channel_axis: The axis along which the transformation shall be executed. Each entry along this axis will have 
-        its own transformation applied along all other axis."""
+    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this unit, respectively.
 
-    def __init__(self, channel_count: int, channel_axis: int = -1):
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
+    
+    References:
+
+    - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
+    - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
+    """
+    
+    def __init__(self, shape: List[int], axes: List[int]):
 
         # Super
-        super().__init__()
+        super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__location__ = tf.Variable(tf.zeros(channel_count), trainable=True)
+        self.__location__ = tf.Variable(tf.zeros(shape), trainable=True, name="__location__")
         """The value by which each data point shall be translated."""
 
-        self.__scale__ = tf.Variable(tf.ones(channel_count), trainable=True)
+        self.__scale__ = tf.Variable(tf.ones(shape), trainable=True, name="__scale__")
         """The value by which each data point shall be scaled."""
 
         self.__is_initialized__ = False
         """An indicator for whether lazy initialization has been executed previously."""
 
-        self.__channel_axis__ = channel_axis
-        """The axis along which a data point shall be transformed."""
-
-    def __initialize__(self, x: tf.Tensor) -> None:
+    def __lazy_init__(self, x: tf.Tensor) -> None:
         """This method shall be used to lazily initialize the variables of self.
         
         :param x: The data that is propagated through :py:meth:`call`.
         :type x: :class:`tensorflow.Tensor`"""
 
-        # Move the channel axis to the end
-        new_order = list(range(len(x.shape)))
-        a = new_order[self.__channel_axis__]; del new_order[self.__channel_axis__]; new_order.append(a)
-        x_new = tf.stop_gradient(tf.permute(x, new_order)) # Shape == [other axes , channel count]
+        # Move self.__axes__ to the end
+        for a, axis in enumerate(self.__axes__): x = utt.move_axis(x=x, from_index=axis-a, to_index=-1) # Relies on assumption that axes are ascending
 
-        # Flatten per channel
-        x_new = tf.stop_gradient(tf.reshape(x_new, [np.multiply(new_order[:-1]), -1])) # Shape == [product of all other axes, channel count]
+        # Flatten other axes
+        other_axes = list(range(len(x.shape)))[:-len(self.__axes__)]
+        x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes] + self.__shape__
 
-        # Compute mean and variance channel-wise
-        mean = tf.stop_gradient(tf.reduce_mean(x_new, axis=0)) # Shape == [channel count] 
-        variance = tf.stop_gradient(tf.math.reduce_variance(x_new, axis=0)) # Shape == [channel count]
+        # Compute mean and standard deviation 
+        mean = tf.stop_gradient(tf.math.reduce_mean(x, axis=0)) # Shape == self.__shape__ 
+        standard_deviation = tf.stop_gradient(tf.math.reduce_std(x, axis=0)) # Shape == self.__shape__ 
         
         # Update attributes
         self.__location__.assign(mean)
-        self.__scale__.assign(variance)
-
-    def __scale_to_non_zero__(self) -> None:
-        """Mutating method that corrects the :py:attr:`__scale__` attribute where it is equal to zero by adding a constant epsilon. 
-        This is useful to prevent scaling by 0 which is not invertible."""
-        
-        # Correct scale where it is equal to zero to prevent division by zero
-        epsilon = tf.stop_gradient(tf.constant(1e-6 * (self.__scale__.numpy() == 0), dtype=self.__scale__.dtype)) 
-        self.__scale__.assing(self.__scale__ + epsilon)
+        scale = tf.math.log(standard_deviation+1e-16) # To initialze it for unit variance we need to use log here
+        self.__scale__.assign(scale)
 
     def __prepare_variables_for_computation__(self, x:tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
         """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
@@ -357,9 +432,9 @@ class ActivationNormalization(FlowLayer):
             - location (tensorflow.Variable) - The :py:attr:`__location__` attribute shaped to fit ``x``. 
             - scale (tensorflow.Variable) - The :py:attr:`__scale__` attribute ensured to be non-zero and shaped to fit ``x``."""
 
-        # Preparations
-        self.__scale_to_non_zero__()
-        axes = list(range(len(x.shape))); axes.remove(self.__channel_axis__)
+        # Shape variables to fit x
+        axes = list(range(len(x.shape)))
+        for axis in self.__axes__: axes.remove(axis)
         location = utt.expand_axes(x=self.__location__, axes=axes)
         scale = utt.expand_axes(x=self.__scale__, axes=axes)
 
@@ -369,11 +444,11 @@ class ActivationNormalization(FlowLayer):
     def call(self, x: tf.Tensor) -> tf.Tensor:
 
         # Ensure initialization of variables
-        if not self.__is_initialized__: self.__initialize__(x=x)
+        if not self.__is_initialized__: self.__lazy_init__(x=x)
 
         # Transform
-        scale, location = self.__prepare_variables_for_computation__(x=x)
-        y_hat = (x-location) / (scale) 
+        location, scale = self.__prepare_variables_for_computation__(x=x)
+        y_hat = (x-location) / (tf.math.exp(scale))
 
         # Outputs
         return y_hat
@@ -382,40 +457,59 @@ class ActivationNormalization(FlowLayer):
 
         # Transform
         scale, location = self.__prepare_variables_for_computation__(x=y_hat)
-        x = scale * y_hat + location
+        x = tf.math.exp(scale) * y_hat + location
 
         # Outputs
         return x
            
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Count elements per instance (ignoring channels)
-        instance_count = x.shape[0]
-        element_shape = x.shape; del element_shape[self.__channel_axis__]; del element_shape[0] # Shape ignoring instance and channel axes
-        element_count = tf.math.reduce_prod(element_shape)
+        # Count elements per instance 
+        batch_size = x.shape[0]
+        unit_count = 1
+        for axis in range(1,len(x.shape)):
+            if axis not in self.__axes__:
+                unit_count *= x.shape[axis] 
         
         # Compute logarithmic determinant
-        logarithmic_determinant = element_count * tf.math.reduce_sum(tf.math.log(1/(tf.abs(self.scale)))) # All channel for a single element 
-        logarithmic_determinant = tf.ones([instance_count], dtype=x.dtype)
+        # By defintion: sum across units for ln(1/scale), where scale = exp(self.__scale__)
+        # Rewriting to: sum across units for ln(0) - ln(scale)
+        # Rewriting to: -1 * sum across units for ln(scale)
+        # rewriting to -1 sum across units for ln(exp(self.__scale__)) which result in:
+        logarithmic_determinant = -1 * unit_count * tf.math.reduce_sum(self.__scale__) # All channel for a single unit 
+        logarithmic_determinant = tf.ones(shape=[batch_size]) * logarithmic_determinant
 
         # Outputs
         return logarithmic_determinant
 
 class SequentialFlowNetwork(FlowLayer):
-    """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way."""
+    """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way.
+    
+    :param sequence: A list of layers.
+    :type sequence: List[:class:`FlowLayer`]
+    """
 
-    def __init__(self, layers: List[FlowLayer]):
+    def __init__(self, sequence: List[FlowLayer]):
         
         # Super
-        super(SequentialFlowNetwork, self).__init__()
+        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[]) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
         
         # Attributes
-        self.layers = layers
+        self.sequence = sequence
 
+    def get_config(self):
+
+        # Construct
+        config = super().get_config()
+        config['sequence'] = self.sequence
+        
+        # Outputs
+        return config
+    
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Transform
-        for layer in self.layers: x = layer(x=x)
+        for layer in self.sequence: x = layer(x=x)
         y_hat = x
 
         # Outputs
@@ -424,7 +518,7 @@ class SequentialFlowNetwork(FlowLayer):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Transform
-        for layer in self.layers: y_hat = layer.inverse(x=y_hat)
+        for layer in self.sequence: y_hat = layer.inverse(x=y_hat)
         x = y_hat
 
         # Outputs
@@ -434,7 +528,7 @@ class SequentialFlowNetwork(FlowLayer):
         
         # Transform
         logarithmic_determinant = 0
-        for layer in self.layers: 
+        for layer in self.sequence: 
             logarithmic_determinant += layer.compute_jacobian_determinant(x=x) 
             x = layer(x=x)
             

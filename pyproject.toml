@@ -11,7 +11,7 @@ version = "0.0.4"
 authors = [
   { name="Tim Dick", email="timdi@icloud.com" },
 ]
-description = "A package for invertible interpretable neural networks."
+description = ""
 readme = "README.md"
 requires-python = ">=3.9"
 classifiers = [

@@ -38,7 +38,7 @@ class FlowLayer(tf.keras.Model, ABC):
         for i in range(len(axes)-1):
             assert axes[i] < axes[i+1], f"The axes in input axes ({axes}) are assumed to be strictly ascending"
 
-        #assert 0 not in axes, f"The input axes ({axes}) must not contain the batch axis, i.e. 0."
+        assert 0 not in axes, f"The input axes ({axes}) must not contain the batch axis, i.e. 0."
 
         # Attributes
         self.__shape__ = cp.copy(shape)

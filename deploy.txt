@@ -20,7 +20,7 @@ cd to docs directory, run make html
 
 Uploading to pypi
 pip install -e .
-change version number in pyproject.toml
+change version number in pyproject.toml 
 and include all new libraries in pyproject.toml (same as in requirements)
 python -m build
 remove builds from the old version in the build folder

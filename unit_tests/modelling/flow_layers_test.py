@@ -544,7 +544,234 @@ class TestActivationNormalization(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
 
+    def test_call_3D_input_along_axes_0_2(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 3D inputs along axes 0 and 2."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[2,4], axes=[0,2])
+        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,3,4])
+
+        # Target
+        l_target = tf.zeros([2,4])
+        s_target = tf.ones([2,4])
+
+        # Observe
+        x_observed = layer(x)
+        l_observed = tf.math.reduce_mean(x_observed, axis=1)
+        s_observed = tf.math.reduce_std(x_observed, axis=1)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(l_target.shape), tuple2=tuple(l_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((l_observed-l_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
+
+    def test_call_3D_input_along_axes_1(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 3D inputs along axis 1."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3], axes=[1])
+        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,3,4])
+
+        # Target
+        l_target = tf.zeros([3])
+        s_target = tf.ones([3])
+
+        # Observe
+        x_observed = layer(x)
+        x_observed = tf.reshape(x_observed, [8,3])
+        l_observed = tf.math.reduce_mean(x_observed, axis=0)
+        s_observed = tf.math.reduce_std(x_observed, axis=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(l_target.shape), tuple2=tuple(l_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((l_observed-l_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
+
+    def test_call_4D_input_along_axis_1(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 4D inputs along axis 1."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3], axes=[1])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.float32), [2,3,4,5])
+
+        # Target
+        l_target = tf.zeros([3])
+        s_target = tf.ones([3])
+
+        # Observe
+        x_observed = layer(x)
+        x_observed = tf.reshape(x_observed, [40,3])
+        l_observed = tf.math.reduce_mean(x_observed, axis=0)
+        s_observed = tf.math.reduce_std(x_observed, axis=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(l_target.shape), tuple2=tuple(l_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((l_observed-l_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
+
+    def test_call_4D_input_along_axes_1_2(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 4D inputs along axes 1 and 2."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.float32), [2,3,4,5])
+
+        # Target
+        l_target = tf.zeros([3,4])
+        s_target = tf.ones([3,4])
+
+        # Observe
+        x_observed = layer(x)
+        x_observed = tf.transpose(x_observed, perm=[0,3,1,2]) # Now has shape [2,5,3,4]
+        x_observed = tf.reshape(x_observed, [10,3,4])
+        l_observed = tf.math.reduce_mean(x_observed, axis=0)
+        s_observed = tf.math.reduce_std(x_observed, axis=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(l_target.shape), tuple2=tuple(l_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((l_observed-l_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
+
+    def test_call_4D_input_along_axes_1_3(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 4D inputs along axes 1 and 3."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3,5], axes=[1,3])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.float32), [2,3,4,5])
+
+        # Target
+        l_target = tf.zeros([3,5])
+        s_target = tf.ones([3,5])
+
+        # Observe
+        x_observed = layer(x)
+        x_observed = tf.transpose(x_observed, perm=[0,2,1,3]) # Now has shape [2,4,3,5]
+        x_observed = tf.reshape(x_observed, [8,3,5])
+        l_observed = tf.math.reduce_mean(x_observed, axis=0)
+        s_observed = tf.math.reduce_std(x_observed, axis=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(l_target.shape), tuple2=tuple(l_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((l_observed-l_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
+
+    def test_compute_jacobian_determinant_2_dimensional_axis_1(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 2D inputs"""
+                
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3], axes=[1])
+        x = tf.reshape(tf.range(0,1,delta=1/24,dtype=tf.float32), [8,3])
+
+        # Compute jacobian
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            y = layer(x)
+            J = tape.jacobian(y,x)
+        J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        
+        # Verify triangularity
+        is_triangular = True
+        for j in range(J.shape[0]):
+            is_triangular = is_triangular and (np.allclose(J[j], np.tril(J[j])) or np.allclose(J[j], np.triu(J[j])))
+        
+        self.assertEqual(first=is_triangular, second=True)
+        
+        # Verify determinants
+        x_observed = layer.compute_jacobian_determinant(x=x)
+        for j in range(J.shape[0]):
+            self.assertEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+
+    def test_compute_jacobian_determinant_3_dimensional_axis_1(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 3D inputs"""
+                
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3], axes=[1])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.float32), [5,3,4])
+
+        # Compute jacobian
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            y = layer(x)
+            J = tape.jacobian(y,x)
+        J = tf.reduce_sum(J, axis=3) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        J = tf.reshape(J, [5,12,12])
+
+        # Verify triangularity
+        is_triangular = True
+        for j in range(J.shape[0]):
+            is_triangular = is_triangular and (np.allclose(J[j], np.tril(J[j])) or np.allclose(J[j], np.triu(J[j])))
+        
+        self.assertEqual(first=is_triangular, second=True)
+        
+        # Verify determinants
+        x_observed = layer.compute_jacobian_determinant(x=x)
+        for j in range(J.shape[0]):
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+
+    def test_compute_jacobian_determinant_3_dimensional_axis_2(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 3D inputs"""
+                
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[4], axes=[2])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.float32), [5,3,4])
+
+        # Compute jacobian
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            y = layer(x)
+            J = tape.jacobian(y,x)
+        J = tf.reduce_sum(J, axis=3) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        J = tf.reshape(J, [5,12,12])
+
+        # Verify triangularity
+        is_triangular = True
+        for j in range(J.shape[0]):
+            is_triangular = is_triangular and (np.allclose(J[j], np.tril(J[j])) or np.allclose(J[j], np.triu(J[j])))
+        
+        self.assertEqual(first=is_triangular, second=True)
+        
+        # Verify determinants
+        x_observed = layer.compute_jacobian_determinant(x=x)
+        for j in range(J.shape[0]):
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+
+    def test_compute_jacobian_determinant_3_dimensional_axes_0_2(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 3D inputs"""
+                
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[5,4], axes=[0,2])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.float32), [5,3,4])
+
+        # Compute jacobian
+        with tf.GradientTape() as tape:
+            tape.watch(x)
+            y = layer(x)
+            J = tape.jacobian(y,x)
+        J = tf.reduce_sum(J, axis=3) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
+        J = tf.reshape(J, [5,12,12])
+
+        # Verify triangularity
+        is_triangular = True
+        for j in range(J.shape[0]):
+            is_triangular = is_triangular and (np.allclose(J[j], np.tril(J[j])) or np.allclose(J[j], np.triu(J[j])))
+        
+        self.assertEqual(first=is_triangular, second=True)
+        
+        # Verify determinants
+        x_observed = layer.compute_jacobian_determinant(x=x)
+        for j in range(J.shape[0]):
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
 
 if __name__ == "__main__":
     #unittest.main()
-    TestActivationNormalization.test_call_3D_input_along_axes_1_2(None)
+    TestActivationNormalization.test_compute_jacobian_determinant_3_dimensional_axis_2(None)

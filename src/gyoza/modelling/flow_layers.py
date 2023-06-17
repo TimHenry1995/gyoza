@@ -15,7 +15,7 @@ class FlowLayer(tf.keras.Model, ABC):
         want the layer to operate on the channels you provide [channel count] instead.
     :type shape: List[int]
     :param axes: The axes of transformation. In the example for ``shape`` on width and height you would enter [1,2] here, In the 
-        example for channels you would enter [3] here. 
+        example for channels you would enter [3] here. ``axes`` is assumed not to contain the axis 0, i.e. the batch axis.
     :type axes: List[int]
 
     References:
@@ -37,6 +37,8 @@ class FlowLayer(tf.keras.Model, ABC):
         assert len(shape) == len(axes), f"The input shape ({shape}) is expected to have as many entries as the input axes ({axes})."
         for i in range(len(axes)-1):
             assert axes[i] < axes[i+1], f"The axes in input axes ({axes}) are assumed to be strictly ascending"
+
+        #assert 0 not in axes, f"The input axes ({axes}) must not contain the batch axis, i.e. 0."
 
         # Attributes
         self.__shape__ = cp.copy(shape)
@@ -372,6 +374,16 @@ class ActivationNormalization(FlowLayer):
     normalization:
     
     - y_hat = (x-l)/s, where s and l are the scale and location parameters for this unit, respectively.
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
+    
+    References:
+
+    - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
+    - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
     
     def __init__(self, shape: List[int], axes: List[int]):
@@ -399,8 +411,7 @@ class ActivationNormalization(FlowLayer):
         for a, axis in enumerate(self.__axes__): x = utt.move_axis(x=x, from_index=axis-a, to_index=-1) # Relies on assumption that axes are ascending
 
         # Flatten other axes
-        other_axes = list(range(len(x.shape)))
-        for axis in self.__axes__: other_axes.remove(axis)
+        other_axes = list(range(len(x.shape)))[:-len(self.__axes__)]
         x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes] + self.__shape__
 
         # Compute mean and standard deviation 
@@ -456,9 +467,9 @@ class ActivationNormalization(FlowLayer):
         # Count elements per instance 
         batch_size = x.shape[0]
         unit_count = 1
-        for axis in range(x.shape):
-            if axis != 0 and axis not in self.__axes__:
-                unit_count *= axis 
+        for axis in range(1,len(x.shape)):
+            if axis not in self.__axes__:
+                unit_count *= x.shape[axis] 
         
         # Compute logarithmic determinant
         # By defintion: sum across units for ln(1/scale), where scale = exp(self.__scale__)
@@ -466,7 +477,8 @@ class ActivationNormalization(FlowLayer):
         # Rewriting to: -1 * sum across units for ln(scale)
         # rewriting to -1 sum across units for ln(exp(self.__scale__)) which result in:
         logarithmic_determinant = -1 * unit_count * tf.math.reduce_sum(self.__scale__) # All channel for a single unit 
-        
+        logarithmic_determinant = tf.ones(shape=[batch_size]) * logarithmic_determinant
+
         # Outputs
         return logarithmic_determinant
 

@@ -14,7 +14,7 @@ class BasicFullyConnectedNet(tf.keras.Model):
     :param bool, optional use_batch_normalization: Indicates whether each layer shall use batch normalization or not. Defaults to False.
     """
 
-    def __init__(self, latent_channel_count:int, output_channel_count:int, depth: int, use_tanh:bool=False, use_batch_normalization:bool=False):
+    def __init__(self, latent_channel_count:int, output_channel_count:int, depth: int):
         
         # Super
         super(BasicFullyConnectedNet, self).__init__()
@@ -24,10 +24,7 @@ class BasicFullyConnectedNet(tf.keras.Model):
         layers = []
         for d in range(depth + 1):
             layers.append(tf.keras.layers.Dense(units=channel_counts[d]))
-            if use_batch_normalization: layers.append(tf.keras.layers.BatchNormalization(channel_counts[d]), axis=-1)
-            if d < depth or not use_tanh: layers.append(tf.keras.layers.LeakyReLU())
-        
-        if use_tanh: layers.append(tf.keras.layers.Tanh())
+            if d < depth: layers.append(tf.keras.layers.LeakyReLU())
         
         # Attributes
         self.sequential = tf.keras.Sequential(layers)

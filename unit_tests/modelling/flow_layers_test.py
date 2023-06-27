@@ -5,6 +5,7 @@ import gyoza.modelling.standard_layers as msl
 import gyoza.modelling.masks as mms
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 import os
+import shutil
 
 class TestAdditiveCoupling(unittest.TestCase):
     

@@ -2,9 +2,11 @@ import numpy as np
 import tensorflow as tf
 from typing import Any, Tuple, List, Callable
 from abc import ABC
+import abc
 from gyoza.utilities import tensors as utt
 import gyoza.modelling.masks as mms
 import copy as cp
+from gyoza.modelling import losses as mls
 
 class FlowLayer(tf.keras.Model, ABC):
     """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
@@ -27,11 +29,12 @@ class FlowLayer(tf.keras.Model, ABC):
         - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
 
-    def __init__(self, shape: List[int], axes: List[int]):
+    @abc.abstractmethod
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
         """This constructor shall be used by subclasses only"""
 
         # Super
-        super(FlowLayer, self).__init__()
+        super(FlowLayer, self).__init__(**kwargs)
 
         # Input validity
         assert len(shape) == len(axes), f"The input shape ({shape}) is expected to have as many entries as the input axes ({axes})."
@@ -47,6 +50,7 @@ class FlowLayer(tf.keras.Model, ABC):
         self.__axes__ = cp.copy(axes)
         """The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
+    @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.
 
@@ -55,6 +59,7 @@ class FlowLayer(tf.keras.Model, ABC):
         :return: y_hat (:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the inverse direction. It is thus the counterpart to :py:meth:`call`.
 
@@ -64,6 +69,7 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         """Computes the jacobian determinant of this layer's :py:meth:`call` on a logarithmic scale. The
         natural logarithm is chosen for numerical stability.
@@ -80,10 +86,10 @@ class Shuffle(FlowLayer):
     Thereafter it is saved as a private attribute. Shuffling is thus deterministic from there on.
     """
 
-    def __init__(self, shape: List[int], axes: List[int]):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
         # Super
-        super(Shuffle, self).__init__(shape=shape, axes=axes)
+        super(Shuffle, self).__init__(shape=shape, axes=axes, **kwargs)
         
         # Attributes
         unit_count = tf.reduce_prod(shape).numpy()
@@ -160,10 +166,10 @@ class Coupling(FlowLayer, ABC):
         - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask, **kwargs):
 
         # Super
-        super(Coupling, self).__init__(shape=shape, axes=axes)
+        super(Coupling, self).__init__(shape=shape, axes=axes, **kwargs)
 
         # Input validity
         shape_message = f"The shape ({shape}) provided to the coupling layer and that provided to the mask ({mask.__mask__.shape}) are expected to be the same."
@@ -231,6 +237,7 @@ class Coupling(FlowLayer, ABC):
         # Outputs
         return y_hat
     
+    @abc.abstractmethod
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function implements an invertible coupling for inputs ``x`` and ``parameters``.
         
@@ -243,6 +250,7 @@ class Coupling(FlowLayer, ABC):
 
         raise NotImplementedError()
     
+    @abc.abstractmethod
     def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function is the inverse of :py:meth:`__couple__`.
         
@@ -277,10 +285,10 @@ class Coupling(FlowLayer, ABC):
 class AdditiveCoupling(Coupling):
     """This coupling layer implements an additive coupling of the form y = x + parameters"""
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
         
         # Super
-        super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
 
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         
@@ -311,10 +319,10 @@ class AffineCoupling(Coupling):
     """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
     and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
         
         # Super
-        super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -386,7 +394,7 @@ class ActivationNormalization(FlowLayer):
     - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
     
-    def __init__(self, shape: List[int], axes: List[int]):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
         # Super
         super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
@@ -482,6 +490,7 @@ class ActivationNormalization(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
+# TODO: Test it
 class SequentialFlowNetwork(FlowLayer):
     """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way.
     
@@ -489,23 +498,16 @@ class SequentialFlowNetwork(FlowLayer):
     :type sequence: List[:class:`FlowLayer`]
     """
 
-    def __init__(self, sequence: List[FlowLayer]):
+    def __init__(self, sequence: List[FlowLayer], **kwargs):
         
         # Super
-        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[]) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
+        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[], **kwargs) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
         
         # Attributes
         self.sequence = sequence
+        self.loss_tracker = tf.keras.metrics.Mean(name="loss")
+        self.mae_metric = tf.keras.metrics.MeanAbsoluteError(name="mae")
 
-    def get_config(self):
-
-        # Construct
-        config = super().get_config()
-        config['sequence'] = self.sequence
-        
-        # Outputs
-        return config
-    
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Transform
@@ -535,26 +537,53 @@ class SequentialFlowNetwork(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    from gyoza.utilities import math as gum
+class SupervisedFactorNetwork(SequentialFlowNetwork):
 
-    # Generate some data
-    instance_count = 100
-    x, y = np.meshgrid(np.arange(start=-1, stop=1, step=0.1), np.arange(start=-1, stop=1, step=0.1))
-    x = np.reshape(x,[-1,]); y = np.reshape(y, [-1])
-    x, y = gum.swirl(x=x,y=y)
-    x = tf.transpose([x,y], [1,0]); del y
-    labels = ([0] * (len(x)//2)) + ([1] * (len(x)//2))
-    
-    # Further transformation
-    #shuffle = Shuffle(channel_count=2)
-    #basic_fully_connected = BasicFullyConnectedNet(latent_channel_count=2, output_channel_count=2, depth=2)
-    
-    #tmp = shuffle(x=x)
-    #y_hat = basic_fully_connected(x=tmp)
-    
-    # Visualization
-    plt.figure()
-    plt.scatter(x[:,0],x[:,1],c=labels)
-    plt.show()
+    def __init__(self, sequence: List[FlowLayer], **kwargs):
+        super().__init__(sequence=sequence, **kwargs)
+        self.__loss__ = None
+
+    def train_step(self, data):
+        """_summary_
+
+        :param data: A tuple containg the batch of X and y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
+            2, ...] where 2 indicates the pair x_a, x_b of same factor and ... is the shape of one input instance that has to fit 
+            through :py:attr:`self.sequence`. The tensorflow.Tensor y shall contain the factor indices of shape [batch size].
+        :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
+        :return: metrics (Dict[str:tensroflow.keras.metrics.Metric]) - A dictionary of training metrics.
+        """
+        
+        # Unpack inputs
+        X, y = data
+        z_a = X[:,0,:]; z_b = X[:,1,:]
+
+        # Lazy initialization
+        if self.__loss__ == None: self.__loss__ = mls.SupervisedFactorLoss(factor_channel_counts=tf.reduce_prod(x_a.shape[1:]).numpy(), )
+
+        with tf.GradientTape() as tape:
+            # First instance
+            z_tilde_a = self(z_a, training=True)  # Forward pass
+            j_a = self.compute_jacobian_determinant(x=x_a)
+            
+            # Second instance
+            z_tilde_b = self(z_b, training=True)
+            j_b = self.compute_jacobian_determinant(x=z_b)
+            
+            # Compute loss
+            loss = self.__loss__(y_true=y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
+        # Compute our own metrics
+        self.loss_tracker.update_state(loss)
+        self.mae_metric.update_state(y, y_pred)
+        return {"loss": self.loss_tracker.result(), "mae": self.mae_metric.result()}
+
+    @property
+    def metrics(self):
+        return [self.loss_tracker, self.mae_metric]

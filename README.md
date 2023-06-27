@@ -1,5 +1,5 @@
 # Gyoza 
-## A package for building invertible neural networks
+## A package for building normalizing flow models with artificial neural networks
 
 ## Download
 As this package is distributed via [PyPI](https://pypi.org/project/gyoza/) it can be installed using:

@@ -180,7 +180,7 @@ class Coupling(FlowLayer, ABC):
         axes_message = f"The axes ({axes}) provided to the coupling layer and that provided to the mask ({mask.__axes__}) are expected to be the same."
         assert len(axes) == len(mask.__axes__), axes_message
         for i in range(len(axes)):
-            assert axes[i] == mask.__axes__[i], axese_message
+            assert axes[i] == mask.__axes__[i], axes_message
 
         # Attributes
         self.__compute_coupling_parameters__ = compute_coupling_parameters
@@ -539,9 +539,9 @@ class SequentialFlowNetwork(FlowLayer):
 
 class SupervisedFactorNetwork(SequentialFlowNetwork):
 
-    def __init__(self, sequence: List[FlowLayer], **kwargs):
+    def __init__(self, sequence: List[FlowLayer], factor_channel_count: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
-        self.__loss__ = None
+        self.__loss__ = mls.SupervisedFactorLoss(factor_channel_counts=factor_channel_count)
 
     def train_step(self, data):
         """_summary_
@@ -556,21 +556,18 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         # Unpack inputs
         X, y = data
         z_a = X[:,0,:]; z_b = X[:,1,:]
-
-        # Lazy initialization
-        if self.__loss__ == None: self.__loss__ = mls.SupervisedFactorLoss(factor_channel_counts=tf.reduce_prod(x_a.shape[1:]).numpy(), )
-
+        
         with tf.GradientTape() as tape:
             # First instance
             z_tilde_a = self(z_a, training=True)  # Forward pass
-            j_a = self.compute_jacobian_determinant(x=x_a)
+            j_a = self.compute_jacobian_determinant(x=z_a)
             
             # Second instance
             z_tilde_b = self(z_b, training=True)
             j_b = self.compute_jacobian_determinant(x=z_b)
             
             # Compute loss
-            loss = self.__loss__(y_true=y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
+            loss = self.__loss__.compute(y_true=y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
 
         # Compute gradients
         trainable_vars = self.trainable_variables
@@ -579,11 +576,5 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         # Update weights
         self.optimizer.apply_gradients(zip(gradients, trainable_vars))
 
-        # Compute our own metrics
-        self.loss_tracker.update_state(loss)
-        self.mae_metric.update_state(y, y_pred)
-        return {"loss": self.loss_tracker.result(), "mae": self.mae_metric.result()}
-
-    @property
-    def metrics(self):
-        return [self.loss_tracker, self.mae_metric]
+        # Outputs
+        return loss

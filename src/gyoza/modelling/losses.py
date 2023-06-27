@@ -5,7 +5,7 @@ from typing import List, Tuple
 class UnsupervisedFactorLoss():
     pass
 
-class SupervisedFactorLoss(tf.keras.losses.Loss):
+class SupervisedFactorLoss():
     """This loss can be used to incentivize the entries of the output vector of a normalizing flow network to be arranged according to
     semantic factors of the data. Take the network z^~ = T(z) which accepts data z as input (e.g. a latent representation of a 
     classical auto-encoder) and shall output and a multivariate normal distribution z^~ that arranges its entries as such factors.
@@ -50,14 +50,14 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
         self.__sigma__ = sigma
         """Hyperparameter in (0,1) indicating association strength between pairs of instances."""
 
-    def call(self,y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
+    def compute(self,y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
         """Computes the loss.
         
-        :param y_true: A vector of length batch size, containing indices that indicate for each instance in ``z_tilde_a`` and 
-            ``z_tilde_b`` which factor they have in common. E.g. if there are two factors and 3 pairs of z_tilde, then 
-            ``factor_indices`` could be [1,1,2] indicating that the first two pairs of z_tilde share the concept of factor 1 and 
-            the third pair shares the concept of factor 2. One typically constucts pairs for actual factors and thus the residual 
-            factor (index 0) usually does not occur in this list. 
+        :param y_true: A binary matrix of shape [batch size, factor count], that indicates for each instance in ``z_tilde_a`` and 
+            ``z_tilde_b`` which factors they have in common. E.g. if there are two factors and 3 pairs of z_tilde, then 
+            ``y_true`` could be [[0,1],[0,0],[0,1]], indicating that the first and last pairs of z_tilde share the concept of factor 1 and 
+            the second pair does not have anything in common. The residual factor (located at index 0) is typically not the same for
+            any two instances and thus usually stores a zero in this array.
         :type y_true: :class:`tensorflow.Tensor`
         :param y_pred: A tuple containing [z_tilde_a, z_tilde_b, j_a, j_b]. 
         :type y_pred: Tuple[:class:`tensorflow.Tensor`]
@@ -78,14 +78,21 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
         assert z_tilde_a.shape == z_tilde_b.shape, f"The inputs z_tilde_a and z_tilde_b where expected to have the same shape [batch size, channel count] but found {z_tilde_a.shape} and {z_tilde_b.shape}, respectively."
         assert (z_tilde_a.shape[1] == self.__factor_masks__.shape[1]), f"z_tilde_a was expected to have as many channels along axis 1 as the sum of channels in channels_per_factor specified during initialization ({self.__factor_masks__.shape[1]}) but it has {z_tilde_a.shape[1]}."
         assert (z_tilde_b.shape[1] == self.__factor_masks__.shape[1]), f"z_tilde_b was expected to have as many channels along axis 1 as the sum of channels in channels_per_factor specified during initialization ({self.__factor_masks__.shape[1]}) but it has {z_tilde_b.shape[1]}."
-        assert len(j_a.shape) == 1, f"The input j_a was expexted to have shape [batch size] but found {j_a.shape}."
-        assert len(j_b.shape) == 1, f"The input j_b was expexted to have shape [batch size] but found {j_b.shape}."
+    
+        assert len(j_a.shape) == 1, f"The input j_a was expected to have shape [batch size] but found {j_a.shape}."
+        assert len(j_b.shape) == 1, f"The input j_b was expected to have shape [batch size] but found {j_b.shape}."
         assert j_a.shape == j_b.shape, f"The inputs j_a and j_b where expected to have the same shape [batch size] but have {j_a.shape} and {j_b.shape}, respectively."
         assert j_a.shape[0] == z_tilde_a.shape[0], f"The inputs z_tilde and j are expected to have the same number of instances along the batch axis (axis 0)."
         
+        assert len(y_true.shape) == 2, f"The input y_true is expected to have shape [batch size, factor count], but has shape {y_true.shape}."
+        assert y_true.shape[0] == z_tilde_a.shape[0], f"The inputs y_true and z_tilde are assumed to have the same number of instances in the batch. Found {y_true.shape[0]} and {z_tilde_a.shape[0]}, respectively."
+        
         # Convenience variables
         channel_count =  z_tilde_a.shape[1] 
-        factor_mask = tf.concat([self.__factor_masks__[i:i+1] for i in y_true], axis=0) # Shape == [batch size, channel_size]
+        factor_mask = np.zeros([y_true.shape[0], channel_count]) # Is 1 for all channels of factors shared by a pair z_a, z_b and 0 elsewhere
+        for i, instance in enumerate(y_true):
+            for f in tf.where(instance==1): # f = factor index
+                factor_mask[i] = np.logical_or(factor_mask[i], self.__factor_masks__[f[0]])
         
         # Implement formula (10) of referenced paper
         # L = sum_{F=1}^K expected_value_{x^a,x^b ~ p(x^a, x^b | F)} l(E(x^a), E(x^b)| F)             (term 10)

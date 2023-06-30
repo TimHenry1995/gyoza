@@ -95,7 +95,7 @@ class PairIterator(tf.keras.utils.Sequence):
             # Y_i
             y_a = np.load(os.path.join(self.__data_path__, self.__y_file_names__[x_a_index]))
             y_b = np.load(os.path.join(self.__data_path__, self.__y_file_names__[x_b_index]))
-            Y[i,:] = tf.cast(y_a == y_b, tf.float32)
+            Y[i,:] = tf.cast(y_a == y_b, tf.keras.backend.floatx())
 
         # Outputs
-        return tf.constant(X, dtype=tf.float32), tf.constant(Y, dtype=tf.float32)
+        return tf.constant(X, dtype=tf.keras.backend.floatx()), tf.constant(Y, dtype=tf.keras.backend.floatx())

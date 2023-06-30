@@ -18,11 +18,10 @@ class SupervisedFactorLoss():
     transfer models built externally to construct pairs with similar style. If it is impossible to construct pairs, one can also 
     use the :class:`UnsupervisedFactorLoss` instead.
 
-    :param sigma: This hyperparameter refletcs the general association strength of provided pairs along a factor that is supposed to 
-        captured their similarity. It is chosen to be in the interval (0,1) and should be closer to 1 the more similar training pairs
-        are known to be. One can choose, for instance, its default value of 0,975 if training pairs in the form of animal pictures are
-        based on clearly recognizable species. It should be chosen equal to e.g. 0.5 if the similarity of pairs is generally weak such as
-        furr length, size or shape.  
+    :param sigma: This hyperparameter refletcs the category resemblance of instances. It is chosen to be in the interval (0,1) and 
+        should be clos to 1 for cohesive categories and close to 0 for categories that only loosely apply to their instances. One can 
+        choose, for instance, its default value of 0,975 if training instances in the form of animal pictures are based on clearly 
+        recognizable species. It should be chosen equal to e.g. 0.5 if there is a lot of fluctuation in e.g furr length, size or shape.  
     :type sigma: float, optional
     :param channels_per_factor: A list of integers that enumerates the number of channels (entries in a vector) of the factors thought to underly
         the representation of z_tilde. These shall include the residual factor at index 0 which collect all variation not captured by the 
@@ -44,7 +43,7 @@ class SupervisedFactorLoss():
         for u, channel_count in enumerate(factor_channel_counts): 
             factor_masks[u, total:total+channel_count] = 1
             total += channel_count
-        self.__factor_masks__ = tf.constant(factor_masks, dtype=tf.float32) 
+        self.__factor_masks__ = tf.constant(factor_masks, dtype=tf.keras.backend.floatx()) 
         """Collects masks (one per factor) that are 1 for each factor's channels and zero elsewhere. Shape == [factor count, channel count]"""
 
         self.__sigma__ = sigma
@@ -53,11 +52,15 @@ class SupervisedFactorLoss():
     def compute(self,y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
         """Computes the loss.
         
-        :param y_true: A binary matrix of shape [batch size, factor count], that indicates for each instance in ``z_tilde_a`` and 
-            ``z_tilde_b`` which factors they have in common. E.g. if there are two factors and 3 pairs of z_tilde, then 
-            ``y_true`` could be [[0,1],[0,0],[0,1]], indicating that the first and last pairs of z_tilde share the concept of factor 1 and 
+        :param y_true: A matrix of shape [batch size, factor count], that indicates for each pair in the batch and each factor, to 
+            what extent the two instances from ``z_tilde_a`` and ``z_tilde_b`` share this factor. Similarity is assumed to be in the 
+            range [0,1]. If the factors are all categorical, it makes sense to set these similarities either to 1 or 0, indicating 
+            same class or not, respectviely. E.g. if there are two factors and 3 pairs of z_tilde, then ``y_true`` could be 
+            [[0,1],[0,0],[0,1]], indicating that the first and last pairs of z_tilde share the concept of factor at index 1 and 
             the second pair does not have anything in common. The residual factor (located at index 0) is typically not the same for
-            any two instances and thus usually stores a zero in this array.
+            any two instances and thus usually stores a zero in this array. The hyperparameter sigma (typically close to 1) should be 
+            set to reflect the category resemblance of instances. 
+            do not resemble. In ca
         :type y_true: :class:`tensorflow.Tensor`
         :param y_pred: A tuple containing [z_tilde_a, z_tilde_b, j_a, j_b]. 
         :type y_pred: Tuple[:class:`tensorflow.Tensor`]
@@ -89,22 +92,22 @@ class SupervisedFactorLoss():
         
         # Convenience variables
         channel_count =  z_tilde_a.shape[1] 
-        factor_mask = np.zeros([y_true.shape[0], channel_count]) # Is 1 for all channels of factors shared by a pair z_a, z_b and 0 elsewhere
+        factor_mask = np.zeros([y_true.shape[0], channel_count], dtype=tf.keras.backend.floatx()) # Is 1 for all channels of factors shared by a pair z_a, z_b and 0 elsewhere
         for i, instance in enumerate(y_true):
-            for f in tf.where(instance==1): # f = factor index
-                factor_mask[i] = np.logical_or(factor_mask[i], self.__factor_masks__[f[0]])
+            for f, similarity in enumerate(instance): # f = factor index
+                factor_mask[i] = factor_mask[i] + similarity * self.__factor_masks__[f]
         
         # Implement formula (10) of referenced paper
-        # L = sum_{F=1}^K expected_value_{x^a,x^b ~ p(x^a, x^b | F)} l(E(x^a), E(x^b)| F)             (term 10)
-        # l(z^a, z^b | F) = 0.5 * sum_{k=0}^K ||T(z^a)_k||^2 - log|T'(z^a)|                           (term 7) The auhtors forgot 0.5
-        #                   + sum_{k != F} 0.5 * ||T(z^b)_k||^2 - log|T'(z^b)|                        (term 8) The auhtors forgot 0.5
-        #                   + 0.5 * ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2)     (term 9) The auhtors forgot 0.5
+        # L = sum_{F=1}^K expected_value_{x^a,x^b ~ p(x^a, x^b | F)} l(E(x^a), E(x^b)| F)       (term 10)
+        # l(z^a, z^b | F) = sum_{k=0}^K ||T(z^a)_k||^2 - log|T'(z^a)|                           (term 7) 
+        #                   + sum_{k != F} ||T(z^b)_k||^2 - log|T'(z^b)|                        (term 8) 
+        #                   + ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2)     (term 9) 
         
-        term_7 = 0.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
-        term_8 = 0.5 * tf.reduce_sum(tf.pow((1-factor_mask) * z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
-        term_9 = 0.5 * tf.reduce_sum(tf.pow(factor_mask * (z_tilde_b - self.__sigma__*z_tilde_a), 2), axis=1) / (1-self.__sigma__**2)  # Shape == [batch size]
-
-        loss = tf.reduce_mean(term_7 + term_8 + term_9, axis=0)  # Shape == [1]
+        term_7 = 0#tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
+        term_8 = 0#tf.reduce_sum(tf.pow((1-factor_mask) * z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
+        term_9 = tf.reduce_sum(factor_mask * tf.pow((z_tilde_b - z_tilde_a), 2), axis=1)   # Shape == [batch size]
+        term_bonus = tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
+        loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_bonus, axis=0)  # Shape == [1]
 
         # Outputs
         return loss

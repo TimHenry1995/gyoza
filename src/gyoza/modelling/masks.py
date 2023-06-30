@@ -23,7 +23,7 @@ class Mask(tf.keras.Model, ABC):
         self.__axes__ = axes
         """(:class:List[int]`) - The axes along which the selection shall be applied."""
 
-        self.__mask__ = tf.constant(mask, dtype=tf.float32)
+        self.__mask__ = tf.cast(mask, dtype=tf.keras.backend.floatx())
         """(:class:`tensorflow.Tensor) - The mask to be applied to data passing through this layer."""
 
         self.__from_to__ = Mask.__compute_from_to__(mask=mask)
@@ -52,7 +52,7 @@ class Mask(tf.keras.Model, ABC):
         # Set up matrix
         from_to = np.zeros(shape=[mask.shape[0],mask.shape[0]]) # Square matrix
         from_to[from_indices, to_indices] = 1
-        from_to = tf.constant(from_to, dtype=tf.float32)
+        from_to = tf.constant(from_to, dtype=tf.keras.backend.floatx())
 
         # Outputs
         return from_to
@@ -151,7 +151,7 @@ class HeaviSide(Mask):
         # Set up mask
         mask = np.ones(shape=shape)
         mask[:shape[0] // 2] = 0
-        mask = tf.constant(mask, dtype=tf.float32) 
+        mask = tf.constant(mask) 
 
         # Super
         super(HeaviSide, self).__init__(axes=axes, mask=mask)
@@ -175,7 +175,7 @@ class SquareWave1D(Mask):
         # Set up mask
         mask = np.ones(shape=shape)
         mask[::2] = 0
-        mask = tf.constant(mask, dtype=tf.float32) 
+        mask = tf.constant(mask) 
 
         # Super
         super(SquareWave1D, self).__init__(axes=axes, mask=mask)
@@ -200,7 +200,7 @@ class SquareWave2D(Mask):
         mask = np.ones(shape) 
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
-        mask = tf.constant(mask, dtype=tf.float32) 
+        mask = tf.constant(mask) 
         
         # Super
         super(SquareWave2D, self).__init__(axes=axes, mask=mask)

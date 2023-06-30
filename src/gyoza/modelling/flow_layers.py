@@ -135,7 +135,7 @@ class Shuffle(FlowLayer):
 
         # Copmute
         batch_size = x.shape[0]
-        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
         # Outputs
         return logarithmic_determinant
@@ -310,7 +310,7 @@ class AdditiveCoupling(Coupling):
         
         # Copmute
         batch_size = x.shape[0]
-        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
         # Outputs
         return logarithmic_determinant
@@ -520,7 +520,7 @@ class SequentialFlowNetwork(FlowLayer):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Transform
-        for layer in self.sequence: y_hat = layer.inverse(x=y_hat)
+        for layer in reversed(self.sequence): y_hat = layer.invert(y_hat=y_hat)
         x = y_hat
 
         # Outputs

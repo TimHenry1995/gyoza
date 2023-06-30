@@ -15,7 +15,7 @@ import shutil
 # notes. In particular, the model operates on octets of notes represented by their frequencies. It shall disentangle the diatonic 
 # scale (major versus minor) of the octet and thus allow to change it, while keeping residual aspetcs of the octet intact. 
 
-is_plotting = False    
+is_plotting = True    
 # 1. Generate diatonic scale data set
 # 1.1 Inspect musical notes and their frequencies
 if is_plotting:
@@ -94,7 +94,7 @@ data_folder = os.path.join(os.getcwd(), "Music Scales")
 train_data_folder = os.path.join(data_folder, "Train")
 test_data_folder = os.path.join(data_folder, "Test")
 
-# Ensure folder exist and are empty
+# Ensure folder exists and are empty
 if os.path.exists(train_data_folder): shutil.rmtree(train_data_folder)
 os.makedirs(train_data_folder)
 if os.path.exists(test_data_folder): shutil.rmtree(test_data_folder)
@@ -140,12 +140,19 @@ train_pair_iterator.re
 # 3. Create a model
 def create_model() -> mfl.FlowLayer:
     note_count = 8
-    compute_coupling_parameters = msl.BasicFullyConnectedNet(latent_channel_count=note_count, output_channel_count=note_count, depth=3)
-    mask = gmm.SquareWave1D(axes=[1], shape=[note_count])
+    compute_coupling_parameters_1 = msl.BasicFullyConnectedNet(latent_channel_count=note_count, output_channel_count=note_count, depth=3)
+    mask_1 = gmm.SquareWave1D(axes=[1], shape=[note_count])
+    compute_coupling_parameters_2 = msl.BasicFullyConnectedNet(latent_channel_count=note_count, output_channel_count=note_count, depth=3)
+    mask_2 = gmm.SquareWave1D(axes=[1], shape=[note_count])
+    compute_coupling_parameters_3 = msl.BasicFullyConnectedNet(latent_channel_count=note_count, output_channel_count=note_count, depth=3)
+    mask_3 = gmm.SquareWave1D(axes=[1], shape=[note_count])
     
     network = mfl.SupervisedFactorNetwork(sequence=[
-        mfl.AdditiveCoupling(axes=[1], shape=[note_count], compute_coupling_parameters=compute_coupling_parameters, mask=mask), 
-        mfl.Shuffle(axes=[1], shape=[note_count])
+        mfl.AdditiveCoupling(axes=[1], shape=[note_count], compute_coupling_parameters=compute_coupling_parameters_1, mask=mask_1), 
+        mfl.Shuffle(axes=[1], shape=[note_count]),
+        mfl.AdditiveCoupling(axes=[1], shape=[note_count], compute_coupling_parameters=compute_coupling_parameters_2, mask=mask_2), 
+        mfl.Shuffle(axes=[1], shape=[note_count]),
+        mfl.AdditiveCoupling(axes=[1], shape=[note_count], compute_coupling_parameters=compute_coupling_parameters_3, mask=mask_3), 
         ],
         factor_channel_count=[7,1])
 
@@ -176,3 +183,4 @@ loaded_network.build(input_shape=X_train.shape)
 loaded_network.load_weights(path)
 print(np.round(loaded_network(X_train[:3]).numpy(), 2))
 k=3
+# Harmonics

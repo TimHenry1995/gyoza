@@ -95,10 +95,10 @@ class TestAdditiveCoupling(unittest.TestCase):
         """Tests whether the inverse method of AdditiveCoupling can do 2-dimensional decoupling."""
 
         # Initialize
-        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
+        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float64) 
         mask = mms.SquareWave2D(axes=[1,2], shape=[2,4])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [1,2,4,3])
+        x = tf.random.normal([1,2,4,3], dtype=tf.float64)
         y_hat = x.numpy()
         y_hat[0,0,::2,:] +=1
         y_hat[0,1,1::2,:] += 1
@@ -112,7 +112,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
+        self.assertAlmostEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
 
     def test_call_triangular_jacobian_2_dimensional_input_heaviside_mask(self):
         """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 2-dimensional inputs 

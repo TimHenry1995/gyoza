@@ -103,11 +103,20 @@ class SupervisedFactorLoss():
         #                   + sum_{k != F} ||T(z^b)_k||^2 - log|T'(z^b)|                        (term 8) 
         #                   + ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2)     (term 9) 
         
-        term_7 = 0#tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
+        term_7 = tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
         term_8 = 0#tf.reduce_sum(tf.pow((1-factor_mask) * z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
-        term_9 = tf.reduce_sum(factor_mask * tf.pow((z_tilde_b - z_tilde_a), 2), axis=1)   # Shape == [batch size]
-        term_bonus = tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
-        loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_bonus, axis=0)  # Shape == [1]
-
+        term_9 = 0#tf.reduce_sum(factor_mask * tf.pow((z_tilde_b - z_tilde_a), 2), axis=1)   # Shape == [batch size]
+        term_distance = 0#tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
+        cov = 0#tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
+        term_cov = 0#tf.reduce_sum(tf.pow(cov - tf.eye(channel_count), 2))
+        loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_distance + term_cov, axis=0)  # Shape == [1]
+        
         # Outputs
         return loss
+
+def tf_cov(x):
+    mean_x = tf.reduce_mean(x, axis=0, keepdims=True)
+    mx = tf.matmul(tf.transpose(mean_x), mean_x)
+    vx = tf.matmul(tf.transpose(x), x)/tf.cast(tf.shape(x)[0], tf.keras.backend.floatx())
+    cov_xx = vx - mx
+    return cov_xx

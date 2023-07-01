@@ -17,10 +17,11 @@ from typing import List
 from gyoza.modelling import data_iterators as mdis
 import shutil
 import random
+plt.rcParams["font.family"] = "Times New Roman"
 
 # configuration
 tf.keras.backend.set_floatx('float32') # If reconstruction precision is too low, increase the precision here
-initial_xs = np.arange(0,1+1/999,1/999, dtype=tf.keras.backend.floatx()) # These x points shall be mapped onto manifolds
+initial_xs = np.linspace(0,1,1000, dtype=tf.keras.backend.floatx()) # These x points shall be mapped onto manifolds
 is_plotting = True 
 
 # 1. Generate manifolds
@@ -32,7 +33,7 @@ f4 = lambda x: (x, 0.1*(3*x-1.5)**7)
 f5 = lambda x: (x, np.sin(6*np.pi*x))
 f6 = lambda x: gum.archimedian_spiral(xs=x*5*np.pi, alpha=1)
 
-if is_plotting:
+if False:
     plt.figure(); plt.suptitle("One-Dimensional Manifolds")
     plt.subplot(2,3,1)
     plt.scatter(*f1(initial_xs)); plt.title('f1'); plt.ylim(-1,1)
@@ -55,7 +56,7 @@ if is_plotting:
     plt.show()
 
 # 1.2 Select a manifold
-f_raw = f3
+f_raw = f4
 
 # 1.3 Generate points along the manifold
 noise_function = lambda x, y: (x+ 0.05 * np.random.standard_normal(size=y.shape), y + 0.05 * np.random.standard_normal(size=y.shape))
@@ -100,7 +101,7 @@ print("A batch has shapes:")
 print("X_a_b: (instances, pair, coordinates)", X_a_b.shape)
 print("Y_a_b: (instances)                   ", Y_a_b.shape)
 
-if is_plotting:
+if False:
     plt.figure(); plt.title("Points And Their Manifold Proximities")
     
     plt.scatter(X_a_b[:,0,0], X_a_b[:,0,1])
@@ -135,6 +136,7 @@ def create_model() -> mfl.FlowLayer:
         mfl.AdditiveCoupling(axes=[1], shape=[dimensionality], compute_coupling_parameters=compute_coupling_parameters_3, mask=mask_3), 
         mfl.Shuffle(axes=[1], shape=[dimensionality]),
         mfl.AdditiveCoupling(axes=[1], shape=[dimensionality], compute_coupling_parameters=compute_coupling_parameters_4, mask=mask_4), 
+        mfl.Shuffle(axes=[1], shape=[dimensionality])
         ],
         factor_channel_count=[1,1]) # One channel for the residual factor (index 0) and one for the manifold proximity (index 1)
 
@@ -150,38 +152,80 @@ print(network(X_a_b[:3,0,:]))
 print("... and this is the reconstruction error (should be almost 0)")
 print(network.invert(network(X_a_b[:3,0,:])) - X_a_b[:3,0,:])
 
-# 4. Train the model
-if is_plotting:
-    tmp_xs = np.arange(np.min(initial_xs), np.max(initial_xs), (np.max(initial_xs) - np.min(initial_xs)) / 55)
-    tmp_xs, tmp_ys = f(tmp_xs)
-    plt.figure(); plt.suptitle("Before training")
-    plt.subplot(1,2,1); plt.title("X")
-    plt.scatter(tmp_xs, tmp_ys, c=gum.color_palette/255.0); plt.xlabel("First Dimension"); plt.ylabel("Second Dimension")
-    plt.subplot(1,2,2); plt.title("Z")
-    Z = network(tf.concat([tmp_xs[:,np.newaxis], tmp_ys[:,np.newaxis]], axis=1))
+def plot_input_output(network, x_range, f, title):
+    # Sample from manifold to illustrate distortion of data
+    xs = np.linspace(x_range[0], x_range[1], len(gum.color_palette)) # Each point will receive its own color
+    manifold_xs, manifold_ys = f(xs)
+    
+    # Create gridlines to illustrate distortion of surrounding space
+    points_per_line = 10
+    min_x = np.min(manifold_xs); max_x = np.max(manifold_xs); mean_x = np.abs(np.mean(manifold_xs))
+    xs = np.linspace(min_x - np.abs(mean_x-min_x), max_x + np.abs(mean_x-max_x), points_per_line)
+    min_y = np.min(manifold_ys); max_y = np.max(manifold_ys); mean_y = np.abs(np.mean(manifold_ys))
+    ys = np.linspace(min_y - np.abs(mean_y-min_y), max_y + np.abs(mean_y-max_y), points_per_line)
+    h_xs, h_ys = np.meshgrid(xs, ys) # horizontal line coordinates
+    v_ys, v_xs = np.meshgrid(ys, xs) # vertical line coordinates
+
+    # Plot
+    fig, axs = plt.subplots(2,4,figsize=(9,4.5), gridspec_kw={'height_ratios': [4, 0.5], 'width_ratios':[0.5,4,0.5,4]})
+    # X
+    # Plot joint distributions
+    plt.suptitle(title)
+    plt.subplot(2,4,2); plt.title("X")
+    # Gridlines
+    for l in range(points_per_line): plt.plot(h_xs[l,:], h_ys[l,:], color='#C5C9C7', linewidth=0.75)
+    for l in range(points_per_line): plt.plot(v_xs[l,:], v_ys[l,:], color='#C5C9C7', linewidth=0.75)
+    # Data
+    plt.scatter(manifold_xs, manifold_ys, c=gum.color_palette/255.0); plt.xlabel("First Dimension"); plt.ylabel("Second Dimension")
+    X_x_lim = plt.xlim(); X_y_lim = plt.ylim() # Use these for marginal distributions
+    
+    # Z
+    plt.subplot(2,4,4); plt.title("Z")
+    Z = network(tf.concat([manifold_xs[:,np.newaxis], manifold_ys[:,np.newaxis]], axis=1))
+    H = network(tf.concat([np.reshape(h_xs, [-1])[:,np.newaxis], np.reshape(h_ys, [-1])[:,np.newaxis]], axis=1))
+    V = network(tf.concat([np.reshape(v_xs, [-1])[:,np.newaxis], np.reshape(v_ys, [-1])[:,np.newaxis]], axis=1))
+    
+    # Gridlines
+    for l in range(points_per_line): plt.plot(H[l*points_per_line:(l+1)*points_per_line,0], H[l*points_per_line:(l+1)*points_per_line,1], color='#C5C9C7', linewidth=0.75)
+    for l in range(points_per_line): plt.plot(V[l*points_per_line:(l+1)*points_per_line,0], V[l*points_per_line:(l+1)*points_per_line,1], color='#C5C9C7', linewidth=0.75)
+    # Data
     plt.scatter(Z[:,0], Z[:,1], c=gum.color_palette/255.0); plt.xlabel('Residual Factor'); plt.ylabel('Manifold Proximity Factor')
+    Z_x_lim = plt.xlim(); Z_y_lim = plt.ylim()
+
+    # Plot marginal distributions
+    # X
+    plt.subplot(2,4,6)
+    plt.hist(manifold_xs, histtype='step'); plt.gca().invert_yaxis(); plt.xlim(X_x_lim); plt.axis('off')
+    plt.subplot(2,4,1)
+    plt.hist(manifold_ys, orientation='horizontal', histtype='step'); plt.ylim(X_y_lim); plt.gca().invert_xaxis(); plt.axis('off')
+    
+    # Z
+    plt.subplot(2,4,8)
+    plt.hist(Z[:,0], histtype='step'); plt.gca().invert_yaxis(); plt.xlim(Z_x_lim); plt.axis('off')
+    plt.subplot(2,4,3)
+    plt.hist(Z[:,1], orientation='horizontal', histtype='step'); plt.ylim(Z_y_lim); plt.gca().invert_xaxis(); plt.axis('off')
+    
+    # Make other subplots invisible
+    plt.subplot(2,4,5); plt.axis('off')
+    plt.subplot(2,4,7); plt.axis('off')
+
     plt.tight_layout()
     plt.show() 
+    
+# 4. Train the model
+if is_plotting:
+    plot_input_output(network, x_range = [np.min(initial_xs), np.max(initial_xs)], f=f, title="Before training")
 
 network.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
-epoch_count = 10
+epoch_count = 25
 for e in range(epoch_count):
     iterator = pair_iterator(X=X, Y=Y, batch_size=128)
     for batch in iterator:
         loss = network.train_step(data=batch)
         print(loss.numpy())
-
+        
 if is_plotting:
-    tmp_xs = np.arange(np.min(initial_xs), np.max(initial_xs), (np.max(initial_xs) - np.min(initial_xs)) / 55)
-    tmp_xs, tmp_ys = f(tmp_xs)
-    plt.figure(); plt.suptitle("After training")
-    plt.subplot(1,2,1); plt.title("X")
-    plt.scatter(tmp_xs, tmp_ys, c=gum.color_palette/255.0); plt.xlabel("First Dimension"); plt.ylabel("Second Dimension")
-    plt.subplot(1,2,2); plt.title("Z")
-    Z = network(tf.concat([tmp_xs[:,np.newaxis], tmp_ys[:,np.newaxis]], axis=1)); plt.xlabel('Residual Factor'); plt.ylabel('Manifold Proximity Factor')
-    plt.scatter(Z[:,0], Z[:,1], c=gum.color_palette/255.0)
-    plt.tight_layout()
-    plt.show() 
+    plot_input_output(network, x_range = [np.min(initial_xs), np.max(initial_xs)], f=f, title="After training")
 
 # Saving and Loading
 path = os.path.join(os.getcwd(), "example_model.h5")

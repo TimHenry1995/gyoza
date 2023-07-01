@@ -93,7 +93,7 @@ class Shuffle(FlowLayer):
         
         # Attributes
         unit_count = tf.reduce_prod(shape).numpy()
-        permutation = tf.random.shuffle(tf.range(unit_count))
+        permutation = tf.range(unit_count,0,delta=-1)-1#tf.random.shuffle(tf.range(unit_count))
         self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
         self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
         

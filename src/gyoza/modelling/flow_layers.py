@@ -29,7 +29,6 @@ class FlowLayer(tf.keras.Model, ABC):
         - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
 
-    @abc.abstractmethod
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
         """This constructor shall be used by subclasses only"""
 
@@ -133,7 +132,7 @@ class Shuffle(FlowLayer):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Copmute
+        # Compute
         batch_size = x.shape[0]
         logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
@@ -308,7 +307,7 @@ class AdditiveCoupling(Coupling):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
-        # Copmute
+        # Compute
         batch_size = x.shape[0]
         logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
@@ -490,7 +489,125 @@ class ActivationNormalization(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
-# TODO: Test it
+class ReflectionLayer(FlowLayer):
+    """This layer reflects a data point around ``reflection_count`` learnable normals using the :ref:`Householder transform 
+    <https://en.wikipedia.org/wiki/Householder_transformation>`: . In this context, the normal is the unit length vector orthogonal 
+    to the hyperplane of reflection.
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`. IMPORTANT: These axes are distinct from the learnable reflection axes.
+    :type axes: List[int]
+    :param reflection_count: The number of successive reflections that shall be executed.
+    :type reflection_count: int
+
+    Referenes:
+
+        - "Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs):
+        # Super
+        super(ReflectionLayer, self).__init__(shape=shape, axes=axes, **kwargs)
+
+        # Attributes
+        dimension_count = tf.reduce_prod(shape).numpy()
+        reflection_normals = tf.math.l2_normalize(tf.random.uniform(shape=[reflection_count, dimension_count]), axis=1) 
+        
+        self.__reflection_normals__ = tf.Variable(reflection_normals, trainable=True, name="reflection_normals") # name is needed for getting and setting weights
+        """(:class:`tensorflow.Tensor`) - These are the axes along which an instance is reflected. Shape == [reflection count, dimension count] where dimension count is the product of the shape of the input instance along :py:attr:`self.__axes__`."""
+
+        self.__inverse_mode__ = False
+        "(bool) - Indicates whether the reflections shall be executed in reversed order (True) or forward order (False)."
+
+
+    def __reflect__(self, x: tf.Tensor) -> tf.Tensor:
+        """This function executes all the reflections of self in a sequence by multiplying ``x`` with the corresponding Householder 
+            matrices that are constructed from :py:attr:`__reflection_normals__`. This method provides the backward reflection if 
+            :py:attr:`self.__inverse_mode` == True and forward otherwise.
+
+        :param x: The flattened data of shape [..., dimension count], where dimension count is the product of the :py:attr:`__shape__` as 
+            specified during initialization of self. It is assumed that all axes except for :py:attr:`__axes__` (again, see 
+            initialization of self) are moved to ... in the aforementioned shape of ``x``.
+        :type x: :class:`tensorfflow.Tensor`
+        :return: x_new (:class:`tensorfflow.Tensor`) - The rotated version of ``x`` with same shape.
+        """
+
+        # Convenience variables
+        reflection_count = self.__reflection_normals__.shape[0]
+        dimension_count = self.__reflection_normals__.shape[1]
+
+        # Ensure reflection normal is of unit length 
+        self.__reflection_normals__.assign(tf.math.l2_normalize(self.__reflection_normals__, axis=1))
+
+        # Pass x through the sequence of reflections
+        x_new = x
+        indices = list(range(reflection_count))
+        if self.__inverse_mode__: 
+            # Note: Householder reflections are involutory (their own inverse) https://en.wikipedia.org/wiki/Householder_transformation
+            # One can thus invert a sequence of refelctions by reverse the order of the individual reflections
+            indices.reverse()
+
+        for r in indices:
+            v_r = self.__reflection_normals__[r][:, tf.newaxis] # Shape == [dimension count, 1]
+            R = tf.eye(dimension_count, dtype=tf.keras.backend.floatx()) - 2.0 * v_r * tf.transpose(v_r, conjugate=True)
+            x_new = tf.linalg.matvec(R, x_new)
+
+        # Outputs
+        return x_new
+    
+    def call(self, x: tf.Tensor) -> tf.Tensor:
+        
+        # Initialize
+        old_shape = cp.copy(x.shape)
+
+        # Flatten along self.__axes__ to fit rotation matrix
+        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+
+        # Ensure all axes except for self.__axes__ are move to the start
+        x = utt.move_axis(x=x, from_index=self.__axes__[0], to_index=-1)
+
+        # Reflect
+        y_hat = self.__reflect__(x=x)
+
+        # Move axis back to where it came from
+        x = utt.move_axis(x=y_hat, from_index=-1, to_index=self.__axes__[0])
+
+        # Unflatten to restore original shape
+        y_hat = tf.reshape(y_hat, shape=old_shape)
+        
+        # Outputs
+        return y_hat
+    
+    def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
+        
+        # Prepare self for inversion
+        previous_mode = self.__inverse_mode__
+        self.__inverse_mode__ = True
+
+        # Call forward method (will now function as inverter)
+        x = self(x=y_hat)
+
+        # Undo the setting of self to restore the method's precondition
+        self.__inverse_mode__ = previous_mode
+
+        # Outputs
+        return x
+    
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
+        
+        # It is known that Householder reflections have a determinant of -1 https://math.stackexchange.com/questions/504199/prove-that-the-determinant-of-a-householder-matrix-is-1
+        # It is also known that det(AB) = det(A) det(B) https://proofwiki.org/wiki/Determinant_of_Matrix_Product
+        # This layer applies succesive reflections as matrix multiplications and thus the determinant of the overall transformation is
+        # -1 or 1, depending on whether an even or odd number of reflections are concatenated. Yet on logarithmic scale it is always 0.
+        
+        # Compute
+        batch_size = x.shape[0]
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
+
+        # Outputs
+        return logarithmic_determinant
+
 class SequentialFlowNetwork(FlowLayer):
     """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way.
     

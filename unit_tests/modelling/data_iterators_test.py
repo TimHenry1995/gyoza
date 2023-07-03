@@ -49,7 +49,7 @@ class TestPairIterator(unittest.TestCase):
         """Tests whether PairIterator can be initialized."""
 
         # Initialize
-        iterator = mdis.PairIterator(data_path="", x_file_names=[], y_file_names=[], shape=[3,4], batch_size=4)
+        iterator = mdis.PairIterator(data_path="", x_file_names=[], y_file_names=[], x_shape=[3,4], batch_size=4)
         
     def test_next(self):
         """Tests whether PairIterator produces a sensible sequences of pair batches."""
@@ -59,7 +59,7 @@ class TestPairIterator(unittest.TestCase):
         
         # Initialize
         batch_size = 2
-        iterator = mdis.PairIterator(data_path= folder_path, x_file_names=x_file_names, y_file_names= y_file_names, shape=[3,4], batch_size=batch_size)
+        iterator = mdis.PairIterator(data_path= folder_path, x_file_names=x_file_names, y_file_names= y_file_names, x_shape=[3,4], batch_size=batch_size)
         iterator.__indices__ = np.arange(len(y_file_names)) # Ensure x_a and y are not shuffled
         rd.seed(42) # Ensure x_b are selected predicatbly at random
 

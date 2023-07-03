@@ -99,23 +99,33 @@ class SupervisedFactorLoss():
         
         # Implement formula (10) of referenced paper
         # L = sum_{F=1}^K expected_value_{x^a,x^b ~ p(x^a, x^b | F)} l(E(x^a), E(x^b)| F)       (term 10)
-        # l(z^a, z^b | F) = sum_{k=0}^K ||T(z^a)_k||^2 - log|T'(z^a)|                           (term 7) 
-        #                   + sum_{k != F} ||T(z^b)_k||^2 - log|T'(z^b)|                        (term 8) 
-        #                   + ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2)     (term 9) 
+        # l(z^a, z^b | F) = 0.5 * sum_{k=0}^K ||T(z^a)_k||^2 - log|T'(z^a)|                     (term 7) 
+        #                 + 0.5 * sum_{k != F} ||T(z^b)_k||^2 - log|T'(z^b)|                    (term 8) 
+        #                 + 0.5 * ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2) (term 9) 
+        # NOTE: The authors forgot the multiplier 0.5 in front. Since it is not applied to each entire team, it does make a difference for the final result 
+
+        # This one leads points a to be multivariate normal
+        term_7 = 0.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
         
-        term_7 = tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
-        term_8 = 0#tf.reduce_sum(tf.pow((1-factor_mask) * z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
-        term_9 = 0#tf.reduce_sum(factor_mask * tf.pow((z_tilde_b - z_tilde_a), 2), axis=1)   # Shape == [batch size]
+        # This leads points b to be normal along residual factor and all the factors where they are labelled distinct
+        term_8 = 0.5 * tf.reduce_sum((1-factor_mask) * tf.pow(z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
+        
+        # This leads points a and b (if they are labelled a similar) to be close to each other
+        term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2), axis=1)   # Shape == [batch size]
+        
+        # This leads points a and b (if they are labelled distinct) to be far away from each other
         term_distance = 0#tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
-        cov = 0#tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
-        term_cov = 0#tf.reduce_sum(tf.pow(cov - tf.eye(channel_count), 2))
-        loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_distance + term_cov, axis=0)  # Shape == [1]
         
+        # This leads the channels of the output to be orthogonal
+        cov = 0#tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
+        term_cov = 0#tf.reduce_sum(tf.pow(cov - tf.eye(channel_count, dtype=tf.keras.backend.floatx()), 2))
+        loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_distance + term_cov, axis=0)  # Shape == [1]
+        print(cov)
         # Outputs
         return loss
 
 def tf_cov(x):
-    mean_x = tf.reduce_mean(x, axis=0, keepdims=True)
+    mean_x = tf.reduce_sum(x, axis=0, keepdims=True) / tf.cast(tf.shape(x)[0], tf.keras.backend.floatx())
     mx = tf.matmul(tf.transpose(mean_x), mean_x)
     vx = tf.matmul(tf.transpose(x), x)/tf.cast(tf.shape(x)[0], tf.keras.backend.floatx())
     cov_xx = vx - mx

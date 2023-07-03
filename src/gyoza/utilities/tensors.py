@@ -11,7 +11,7 @@ def move_axis(x: tf.Tensor, from_index: int, to_index: int) -> tf.Tensor:
     :type from_index: int
     :param to_index: The index of the axis after transposition.
     :type to_index: int
-    :return: x_new (:class:`tensorflow.Tensor`): The tensor x transposed such that shape [..., k, ...] is now at to_index."""
+    :return: x_new (:class:`tensorflow.Tensor`): The tensor x transposed such that shape [..., k, ...] now has k at to_index."""
  
     # Input validity
     if from_index == -1: from_index = len(x.shape)-1

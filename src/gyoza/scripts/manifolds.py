@@ -20,7 +20,7 @@ import random
 plt.rcParams["font.family"] = "Times New Roman"
 
 # configuration
-tf.keras.backend.set_floatx('float32') # If reconstruction precision is too low, increase the precision here
+tf.keras.backend.set_floatx('float64') # If reconstruction precision is too low, increase the precision here
 initial_xs = np.linspace(0,1,1000, dtype=tf.keras.backend.floatx()) # These x points shall be mapped onto manifolds
 is_plotting = True 
 
@@ -30,7 +30,7 @@ f1 = lambda x: (x, 0*x)
 f2 = lambda x: gum.rotate(xs=x, ys=0*x, theta=np.pi/4)
 f3 = lambda x: (x, x**6)
 f4 = lambda x: (x, 0.1*(3*x-1.5)**7)
-f5 = lambda x: (x, np.sin(6*np.pi*x))
+f5 = lambda x: (x, np.sin(3*np.pi*x))
 f6 = lambda x: gum.archimedian_spiral(xs=x*5*np.pi, alpha=1)
 
 if False:
@@ -57,9 +57,10 @@ if False:
 
 # 1.2 Select a manifold
 f_raw = f4
+noise_strength = 0.05
 
 # 1.3 Generate points along the manifold
-noise_function = lambda x, y: (x+ 0.05 * np.random.standard_normal(size=y.shape), y + 0.05 * np.random.standard_normal(size=y.shape))
+noise_function = lambda x, y: (x+ noise_strength * np.random.standard_normal(size=y.shape), y + noise_strength * np.random.standard_normal(size=y.shape))
 f = lambda x: noise_function(*f_raw(x))
 Y = initial_xs # Here the 'labels' are the position along the unit line
 xs, ys = f(initial_xs) # Map onto manifold in 2D plane
@@ -145,12 +146,12 @@ def create_model() -> mfl.FlowLayer:
 network = create_model()
 #network.build(input_shape=X_train.shape)
 
-print("For the following 3 (non-paired) input instances ... ")
-print(X_a_b[:3,0,:])
+print("For the following 3 X_a input instances ... ")
+print(X_a_b[:3,0,:]) # 0 selects X_a
 print("... the model provides this decomposition ")
-print(network(X_a_b[:3,0,:]))
+print(network(X_a_b[:3,0,:])) # 0 selects X_a
 print("... and this is the reconstruction error (should be almost 0)")
-print(network.invert(network(X_a_b[:3,0,:])) - X_a_b[:3,0,:])
+print(network.invert(network(X_a_b[:3,0,:])) - X_a_b[:3,0,:])  # 0 selects X_a
 
 def plot_input_output(network, x_range, f, title):
     # Sample from manifold to illustrate distortion of data
@@ -176,7 +177,7 @@ def plot_input_output(network, x_range, f, title):
     for l in range(points_per_line): plt.plot(h_xs[l,:], h_ys[l,:], color='#C5C9C7', linewidth=0.75)
     for l in range(points_per_line): plt.plot(v_xs[l,:], v_ys[l,:], color='#C5C9C7', linewidth=0.75)
     # Data
-    plt.scatter(manifold_xs, manifold_ys, c=gum.color_palette/255.0); plt.xlabel("First Dimension"); plt.ylabel("Second Dimension")
+    plt.scatter(manifold_xs, manifold_ys, c=gum.color_palette/255.0, zorder=3); plt.xlabel("First Dimension"); plt.ylabel("Second Dimension")
     X_x_lim = plt.xlim(); X_y_lim = plt.ylim() # Use these for marginal distributions
     
     # Z
@@ -189,7 +190,7 @@ def plot_input_output(network, x_range, f, title):
     for l in range(points_per_line): plt.plot(H[l*points_per_line:(l+1)*points_per_line,0], H[l*points_per_line:(l+1)*points_per_line,1], color='#C5C9C7', linewidth=0.75)
     for l in range(points_per_line): plt.plot(V[l*points_per_line:(l+1)*points_per_line,0], V[l*points_per_line:(l+1)*points_per_line,1], color='#C5C9C7', linewidth=0.75)
     # Data
-    plt.scatter(Z[:,0], Z[:,1], c=gum.color_palette/255.0); plt.xlabel('Residual Factor'); plt.ylabel('Manifold Proximity Factor')
+    plt.scatter(Z[:,0], Z[:,1], c=gum.color_palette/255.0, zorder=3); plt.xlabel('Residual Factor'); plt.ylabel('Manifold Proximity Factor')
     Z_x_lim = plt.xlim(); Z_y_lim = plt.ylim()
 
     # Plot marginal distributions
@@ -214,10 +215,10 @@ def plot_input_output(network, x_range, f, title):
     
 # 4. Train the model
 if is_plotting:
-    plot_input_output(network, x_range = [np.min(initial_xs), np.max(initial_xs)], f=f, title="Before training")
+    plot_input_output(network, x_range = [np.min(initial_xs), np.max(initial_xs)], f=f, title="X And Z Before Model Calibration")
 
 network.compile(optimizer=tf.keras.optimizers.Adam(learning_rate=0.001))
-epoch_count = 25
+epoch_count = 20
 for e in range(epoch_count):
     iterator = pair_iterator(X=X, Y=Y, batch_size=128)
     for batch in iterator:
@@ -225,7 +226,10 @@ for e in range(epoch_count):
         print(loss.numpy())
         
 if is_plotting:
-    plot_input_output(network, x_range = [np.min(initial_xs), np.max(initial_xs)], f=f, title="After training")
+    plot_input_output(network, x_range = [np.min(initial_xs), np.max(initial_xs)], f=f, title="X And Z ")
+
+# Evaluate
+# take factor 1 and measure its correlation with initial_x
 
 # Saving and Loading
 path = os.path.join(os.getcwd(), "example_model.h5")

@@ -4,8 +4,8 @@ import tensorflow as tf
 
 class TestHeaviSide(unittest.TestCase):
     
-    def test_mask_one_dimensional_even_length(self):
-        """Tests whether the mask function of HeaviSide works on a 1 dimensional input of even length."""
+    def test_mask_one_axis_even_length(self):
+        """Tests whether the mask function of HeaviSide works on a 1 axis input of even length."""
 
         # Initialize
         x = tf.range(10, dtype=tf.keras.backend.floatx())
@@ -21,8 +21,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_one_dimensional_odd_length(self):
-        """Tests whether the mask function of HeaviSide works on a 1 dimensional input of odd length."""
+    def test_mask_one_axis_odd_length(self):
+        """Tests whether the mask function of HeaviSide works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.range(11, dtype=tf.keras.backend.floatx())
@@ -38,8 +38,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_two_dimensional_axis_1(self):
-        """Tests whether the mask function of HeaviSide works on a two dimensional input along axis 1."""
+    def test_mask_two_axes_axis_1(self):
+        """Tests whether the mask function of HeaviSide works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -55,8 +55,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_two_dimensional_axis_0(self):
-        """Tests whether the mask function of HeaviSide works on a two dimensional input along axis 0."""
+    def test_mask_two_axes_axis_0(self):
+        """Tests whether the mask function of HeaviSide works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -72,8 +72,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_two_dimensional_axis_1_negative(self):
-        """Tests whether the mask function of HeaviSide works on a two dimensional input along axis 1
+    def test_mask_two_axes_axis_1_negative(self):
+        """Tests whether the mask function of HeaviSide works on a two axes input along axis 1
         with a negative mask."""
 
         # Initialize
@@ -90,8 +90,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_one_dimensional_odd(self):
-        """Tests whether the arrange method of HeaviSide works on a 1 dimensional input of odd length."""
+    def test_arrange_one_axis_odd(self):
+        """Tests whether the arrange method of HeaviSide works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.range(11, dtype=tf.keras.backend.floatx())
@@ -107,8 +107,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_two_dimensional_axis_1(self):
-        """Tests whether the arrange method of HeaviSide works on a two dimensional input along axis 1."""
+    def test_arrange_two_axes_axis_1(self):
+        """Tests whether the arrange method of HeaviSide works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.reshape(tf.range(21, dtype=tf.keras.backend.floatx()), shape=[3,7])
@@ -124,8 +124,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_one_dimensional_odd(self):
-        """Tests whether the re_arrange method of HeaviSide works on a 1 dimensional input of odd length."""
+    def test_re_arrange_one_axis_odd(self):
+        """Tests whether the re_arrange method of HeaviSide works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.constant([5,6,7,8,9,10, 0,1,2,3,4], dtype=tf.keras.backend.floatx())
@@ -141,8 +141,8 @@ class TestHeaviSide(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_two_dimensional_axis_1(self):
-        """Tests whether the re_arrange method of HeaviSide works on a two dimensional input along axis 1."""
+    def test_re_arrange_two_axes_axis_1(self):
+        """Tests whether the re_arrange method of HeaviSide works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.constant([[3,4,5,6,0,1,2],[10,11,12,13,7,8,9]], dtype=tf.keras.backend.floatx())
@@ -159,10 +159,10 @@ class TestHeaviSide(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
 
-class TestSquareWave1D(unittest.TestCase):
-    def test_mask_one_dimensional_even_length(self):
+class TestSquareWaveSingleAxis(unittest.TestCase):
+    def test_mask_one_axis_even_length(self):
 
-        """Tests whether the mask method of SquareWave1D works on a 1 dimensional input of even length."""
+        """Tests whether the mask method of SquareWaveSingleAxis works on a 1 axis input of even length."""
 
         # Initialize
         x = tf.range(10, dtype=tf.keras.backend.floatx())
@@ -173,15 +173,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave1D(axes=[0], shape=[10])
+        instance = mms.SquareWaveSingleAxis(axes=[0], shape=[10])
         x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_two_dimensional_axis_1(self):
-        """Tests whether the mask method of SquareWave1D works on a two dimensional input along axis 1."""
+    def test_mask_two_axes_axis_1(self):
+        """Tests whether the mask method of SquareWaveSingleAxis works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -192,15 +192,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave1D(axes=[1], shape=[5])
+        instance = mms.SquareWaveSingleAxis(axes=[1], shape=[5])
         x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_two_dimensional_axis_0(self):
-        """Tests whether the mask method of SquareWave1D works on a two dimensional input along axis 0."""
+    def test_mask_two_axes_axis_0(self):
+        """Tests whether the mask method of SquareWaveSingleAxis works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -211,15 +211,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave1D(axes=[0], shape=[3])
+        instance = mms.SquareWaveSingleAxis(axes=[0], shape=[3])
         x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_two_dimensional_axis_1_negative(self):
-        """Tests whether the mask method of SquareWave1D works on a two dimensional input along axis 1
+    def test_mask_two_axes_axis_1_negative(self):
+        """Tests whether the mask method of SquareWaveSingleAxis works on a two axes input along axis 1
         with a negative mask."""
 
         # Initialize
@@ -231,15 +231,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave1D(axes=[1], shape=[5])
+        instance = mms.SquareWaveSingleAxis(axes=[1], shape=[5])
         x_observed = instance.call(x=x, is_positive=False)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_one_dimensional_odd(self):
-        """Tests whether the arrange method of SquareWave1D works on a 1 dimensional input of odd length."""
+    def test_arrange_one_axis_odd(self):
+        """Tests whether the arrange method of SquareWaveSingleAxis works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.constant([5,2,6,1,3], dtype=tf.keras.backend.floatx())
@@ -248,15 +248,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant([2,1,5,6,3], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave1D(axes=[0], shape=[5])
+        instance = mms.SquareWaveSingleAxis(axes=[0], shape=[5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_two_dimensional_axis_0(self):
-        """Tests whether the arrange method of SquareWave1D works on a two dimensional input along axis 0."""
+    def test_arrange_two_axes_axis_0(self):
+        """Tests whether the arrange method of SquareWaveSingleAxis works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
@@ -265,15 +265,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant([[8,6,2,4,0],[5,2,6,1,3]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave1D(axes=[0], shape=[2])
+        instance = mms.SquareWaveSingleAxis(axes=[0], shape=[2])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_two_dimensional_axis_1(self):
-        """Tests whether the arrange method of SquareWave1D works on a two dimensional input along axis 1."""
+    def test_arrange_two_axes_axis_1(self):
+        """Tests whether the arrange method of SquareWaveSingleAxis works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
@@ -282,15 +282,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant([[2,1,5,6,3],[6,4,8,2,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave1D(axes=[1], shape=[5])
+        instance = mms.SquareWaveSingleAxis(axes=[1], shape=[5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_one_dimensional_odd(self):
-        """Tests whether the re_arrange method of SquareWave1D works on a 1 dimensional input of odd length."""
+    def test_re_arrange_one_axis_odd(self):
+        """Tests whether the re_arrange method of SquareWaveSingleAxis works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.constant([2,1,5,6,3], dtype=tf.keras.backend.floatx())
@@ -299,15 +299,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant([5,2,6,1,3], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave1D(axes=[0], shape=[5])
+        instance = mms.SquareWaveSingleAxis(axes=[0], shape=[5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_two_dimensional_axis_0(self):
-        """Tests whether the re_arrange method of SquareWave1D works on a two dimensional input along axis 0."""
+    def test_re_arrange_two_axes_axis_0(self):
+        """Tests whether the re_arrange method of SquareWaveSingleAxis works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.constant([[8,6,2,4,0],[5,2,6,1,3]], dtype=tf.keras.backend.floatx())
@@ -316,15 +316,15 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave1D(axes=[0], shape=[2])
+        instance = mms.SquareWaveSingleAxis(axes=[0], shape=[2])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_two_dimensional_axis_1(self):
-        """Tests whether the re_arrange method of SquareWave1D works on a two dimensional input along axis 1."""
+    def test_re_arrange_two_axes_axis_1(self):
+        """Tests whether the re_arrange method of SquareWaveSingleAxis works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.constant([[2,1,5,6,3],[6,4,8,2,0]], dtype=tf.keras.backend.floatx())
@@ -333,17 +333,17 @@ class TestSquareWave1D(unittest.TestCase):
         x_target = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave1D(axes=[1], shape=[5])
+        instance = mms.SquareWaveSingleAxis(axes=[1], shape=[5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-class TestSquareWave2D(unittest.TestCase):
+class TestSquareWaveTwoAxes(unittest.TestCase):
 
-    def test_mask_two_dimensional_axes_0_1(self):
-        """Tests whether the mask method of SquareWave2D works on a two dimensional input along axes 0 and 1."""
+    def test_mask_two_axes_axes_0_1(self):
+        """Tests whether the mask method of SquareWaveTwoAxes works on a two axes input along axes 0 and 1."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -356,15 +356,15 @@ class TestSquareWave2D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave2D(axes=[0,1], shape=[3,5])
+        instance = mms.SquareWaveTwoAxes(axes=[0,1], shape=[3,5])
         x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_three_dimensional_axes_1_2(self):
-        """Tests whether the mask method of SquareWave2D works on a three dimensional input along axes 1 and 2."""
+    def test_mask_three_axes_axes_1_2(self):
+        """Tests whether the mask method of SquareWaveTwoAxes works on a three axes input along axes 1 and 2."""
 
         # Initialize
         x = tf.reshape(tf.range(30, dtype=tf.keras.backend.floatx()), shape=[2,3,5])
@@ -377,15 +377,15 @@ class TestSquareWave2D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave2D(axes=[1,2], shape=[3,5])
+        instance = mms.SquareWaveTwoAxes(axes=[1,2], shape=[3,5])
         x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_mask_four_dimensional_axes_1_2(self):
-        """Tests whether the mask method of SquareWave2D works on a three dimensional input along axes 1 and 2."""
+    def test_mask_four_axes_axes_1_2(self):
+        """Tests whether the mask method of SquareWaveTwoAxes works on a three axes input along axes 1 and 2."""
 
         # Initialize
         x = tf.reshape(tf.range(60, dtype=tf.keras.backend.floatx()), shape=[2,3,5,2])
@@ -398,15 +398,15 @@ class TestSquareWave2D(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave2D(axes=[1,2], shape=[3,5])
+        instance = mms.SquareWaveTwoAxes(axes=[1,2], shape=[3,5])
         x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_two_dimensional_axis_0_1(self):
-        """Tests whether the arrange method of SquareWave2D works on a two dimensional input along axis 0 and 1."""
+    def test_arrange_two_axes_axis_0_1(self):
+        """Tests whether the arrange method of SquareWaveTwoAxes works on a two axes input along axis 0 and 1."""
 
         # Initialize
         x = tf.constant([[5,2,6,1,3],
@@ -416,15 +416,15 @@ class TestSquareWave2D(unittest.TestCase):
         x_target = tf.constant([2,1,8,2,0,5,6,3,6,4], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave2D(axes=[0,1], shape=[2,5])
+        instance = mms.SquareWaveTwoAxes(axes=[0,1], shape=[2,5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_three_dimensional_axis_1_2(self):
-        """Tests whether the arrange method of SquareWave2D works on a three dimensional input along axis 1 and 2."""
+    def test_arrange_three_axes_axis_1_2(self):
+        """Tests whether the arrange method of SquareWaveTwoAxes works on a three axes input along axis 1 and 2."""
 
         # Initialize
         x = tf.constant([[[5,2,6,1,3],
@@ -438,15 +438,15 @@ class TestSquareWave2D(unittest.TestCase):
                                 [4,3,3,2,4,1,8,5,5,8]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave2D(axes=[1,2], shape=[2,5])
+        instance = mms.SquareWaveTwoAxes(axes=[1,2], shape=[2,5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_arrange_four_dimensional_axis_1_2(self):
-        """Tests whether the arrange method of SquareWave2D works on a four dimensional input along axis 1 and 2."""
+    def test_arrange_four_axes_axis_1_2(self):
+        """Tests whether the arrange method of SquareWaveTwoAxes works on a four axes input along axis 1 and 2."""
 
         # Initialize
         x_a = tf.constant([[[5,2,6,1,3], # First channel
@@ -472,15 +472,15 @@ class TestSquareWave2D(unittest.TestCase):
         x_target = tf.concat([x_target_a[:,:,tf.newaxis], x_target_b[:,:,tf.newaxis]], axis=-1)
 
         # Observe
-        instance = mms.SquareWave2D(axes=[1,2], shape=[2,5])
+        instance = mms.SquareWaveTwoAxes(axes=[1,2], shape=[2,5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_two_dimensional_axis_0_1(self):
-        """Tests whether the re_arrange method of SquareWave2D works on a two dimensional input along axis 0 and 1."""
+    def test_re_arrange_two_axes_axis_0_1(self):
+        """Tests whether the re_arrange method of SquareWaveTwoAxes works on a two axes input along axis 0 and 1."""
 
         # Initialize
         x = tf.constant([2,1,8,2,0,5,6,3,6,4], dtype=tf.keras.backend.floatx())
@@ -490,15 +490,15 @@ class TestSquareWave2D(unittest.TestCase):
                          [8,6,2,4,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave2D(axes=[0,1], shape=[2,5])
+        instance = mms.SquareWaveTwoAxes(axes=[0,1], shape=[2,5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_three_dimensional_axis_1_2(self):
-        """Tests whether the re_arrange method of SquareWave2D works on a three dimensional input along axis 1 and 2."""
+    def test_re_arrange_three_axes_axis_1_2(self):
+        """Tests whether the re_arrange method of SquareWaveTwoAxes works on a three axes input along axis 1 and 2."""
 
         # Initialize
         x = tf.constant([[2,1,8,2,0,5,6,3,6,4],
@@ -512,15 +512,15 @@ class TestSquareWave2D(unittest.TestCase):
                                  [3,5,2,8,4]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave2D(axes=[1,2], shape=[2,5])
+        instance = mms.SquareWaveTwoAxes(axes=[1,2], shape=[2,5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-    def test_re_arrange_four_dimensional_axis_1_2(self):
-        """Tests whether the re_arrange method of SquareWave2D works on a four dimensional input along axis 1 and 2."""
+    def test_re_arrange_four_axes_axis_1_2(self):
+        """Tests whether the re_arrange method of SquareWaveTwoAxes works on a four axes input along axis 1 and 2."""
 
         # Initialize
         x_a = tf.constant([[2,1,8,2,0,5,6,3,6,4], # First channel
@@ -546,7 +546,7 @@ class TestSquareWave2D(unittest.TestCase):
         x_target = tf.concat([x_target_a[:,:,:,tf.newaxis], x_target_b[:,:,:,tf.newaxis]], axis=-1)
 
         # Observe
-        instance = mms.SquareWave2D(axes=[1,2], shape=[2,5])
+        instance = mms.SquareWaveTwoAxes(axes=[1,2], shape=[2,5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
@@ -555,4 +555,4 @@ class TestSquareWave2D(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestSquareWave2D.test_arrange_four_dimensional_axis_1_2(None)
+    TestSquareWaveTwoAxes.test_arrange_four_axes_axis_1_2(None)

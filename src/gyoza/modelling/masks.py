@@ -156,7 +156,7 @@ class HeaviSide(Mask):
         # Super
         super(HeaviSide, self).__init__(axes=axes, mask=mask)
 
-class SquareWave1D(Mask):
+class SquareWaveSingleAxis(Mask):
     """Applies a one-dimensional square wave of the shape 010101 to its input. Inputs are expected to have 1 spatial axis located at
     ``axes`` with ``shape`` many elements.
     
@@ -178,9 +178,9 @@ class SquareWave1D(Mask):
         mask = tf.constant(mask) 
 
         # Super
-        super(SquareWave1D, self).__init__(axes=axes, mask=mask)
+        super(SquareWaveSingleAxis, self).__init__(axes=axes, mask=mask)
 
-class SquareWave2D(Mask):
+class SquareWaveTwoAxes(Mask):
     """Applies a two-dimensional square wave, also known as checkerboard pattern to its input. Inputs are expected to have 2 spatial
     axes located at ``axes`` with ``shape`` units along those axes.
         
@@ -203,4 +203,4 @@ class SquareWave2D(Mask):
         mask = tf.constant(mask) 
         
         # Super
-        super(SquareWave2D, self).__init__(axes=axes, mask=mask)
+        super(SquareWaveTwoAxes, self).__init__(axes=axes, mask=mask)

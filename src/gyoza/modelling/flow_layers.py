@@ -13,11 +13,12 @@ class FlowLayer(tf.keras.Model, ABC):
     initialization.
     
     :param shape: The shape of the input that shall be transformed by this layer. If you have e.g. a tensor [batch size, width, 
-        height, channel count] and you want this layer to transform along width and height you enter [width, height] as shape. If you 
-        want the layer to operate on the channels you provide [channel count] instead.
+        height, color] and you want this layer to transform along width and height, you enter the shape [width, height]. If you 
+        want the layer to operate on the color you provide [color dimension count] instead.
     :type shape: List[int]
     :param axes: The axes of transformation. In the example for ``shape`` on width and height you would enter [1,2] here, In the 
-        example for channels you would enter [3] here. ``axes`` is assumed not to contain the axis 0, i.e. the batch axis.
+        example for color you would enter [3] here. Although axes are counted starting from zero, it is assumed that ``axes`` 
+        does not contain the axis 0, i.e. the batch axis.
     :type axes: List[int]
 
     References:
@@ -91,8 +92,8 @@ class Shuffle(FlowLayer):
         super(Shuffle, self).__init__(shape=shape, axes=axes, **kwargs)
         
         # Attributes
-        unit_count = tf.reduce_prod(shape).numpy()
-        permutation = tf.range(unit_count,0,delta=-1)-1#tf.random.shuffle(tf.range(unit_count))
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = tf.range(dimension_count,0,delta=-1)-1#tf.random.shuffle(tf.range(dimension_count))
         self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
         self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
         
@@ -374,13 +375,13 @@ class AffineCoupling(Coupling):
         return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
-    """A trainable location and scale transformation of the data. For each unit of the specified input shape, a scale and a location 
+    """A trainable location and scale transformation of the data. For each dimension of the specified input shape, a scale and a location 
     parameter is used. That is, if shape = [width, height] then 2 * width * height many parameters are used. Each pair of location and
-    scale is initialized to produce mean equal to 0 and variance equal to 1 for its unit. To allow for invertibility, the scale parameter 
-    has to be non-zero and is therefore chosen to be on an exponential scale. Each unit thus has the following activation 
+    scale is initialized to produce mean equal to 0 and variance equal to 1 for its dimension. To allow for invertibility, the scale parameter 
+    has to be non-zero and is therefore chosen to be on an exponential scale. Each dimension thus has the following activation 
     normalization:
     
-    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this unit, respectively.
+    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this dimension, respectively.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -473,26 +474,27 @@ class ActivationNormalization(FlowLayer):
 
         # Count elements per instance 
         batch_size = x.shape[0]
-        unit_count = 1
+        dimension_count = 1
         for axis in range(1,len(x.shape)):
             if axis not in self.__axes__:
-                unit_count *= x.shape[axis] 
+                dimension_count *= x.shape[axis] 
         
         # Compute logarithmic determinant
-        # By defintion: sum across units for ln(1/scale), where scale = exp(self.__scale__)
-        # Rewriting to: sum across units for ln(0) - ln(scale)
-        # Rewriting to: -1 * sum across units for ln(scale)
-        # rewriting to -1 sum across units for ln(exp(self.__scale__)) which result in:
-        logarithmic_determinant = -1 * unit_count * tf.math.reduce_sum(self.__scale__) # All channel for a single unit 
+        # By defintion: sum across dimensions for ln(1/scale), where scale = exp(self.__scale__)
+        # Rewriting to: sum across dimensions for ln(0) - ln(scale)
+        # Rewriting to: -1 * sum across dimensions for ln(scale)
+        # rewriting to: -1 * sum across dimensions for ln(exp(self.__scale__)) which results in:
+        logarithmic_determinant = -1 * dimension_count * tf.math.reduce_sum(self.__scale__) # All dimensions for a single instance 
         logarithmic_determinant = tf.ones(shape=[batch_size]) * logarithmic_determinant
 
         # Outputs
         return logarithmic_determinant
 
-class ReflectionLayer(FlowLayer):
+class Reflection(FlowLayer):
     """This layer reflects a data point around ``reflection_count`` learnable normals using the :ref:`Householder transform 
     <https://en.wikipedia.org/wiki/Householder_transformation>`: . In this context, the normal is the unit length vector orthogonal 
-    to the hyperplane of reflection.
+    to the hyperplane of reflection. When ``axes`` contains more than a single entry, the input is first flattened along these
+    axes, then reflected and then unflattened to original shape.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -508,7 +510,7 @@ class ReflectionLayer(FlowLayer):
 
     def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs):
         # Super
-        super(ReflectionLayer, self).__init__(shape=shape, axes=axes, **kwargs)
+        super(Reflection, self).__init__(shape=shape, axes=axes, **kwargs)
 
         # Attributes
         dimension_count = tf.reduce_prod(shape).numpy()
@@ -545,7 +547,7 @@ class ReflectionLayer(FlowLayer):
         indices = list(range(reflection_count))
         if self.__inverse_mode__: 
             # Note: Householder reflections are involutory (their own inverse) https://en.wikipedia.org/wiki/Householder_transformation
-            # One can thus invert a sequence of refelctions by reverse the order of the individual reflections
+            # One can thus invert a sequence of refelctions by reversing the order of the individual reflections
             indices.reverse()
 
         for r in indices:
@@ -561,17 +563,17 @@ class ReflectionLayer(FlowLayer):
         # Initialize
         old_shape = cp.copy(x.shape)
 
-        # Flatten along self.__axes__ to fit rotation matrix
+        # Flatten along self.__axes__ to fit reflection matrix
         x = utt.flatten_along_axes(x=x, axes=self.__axes__)
 
-        # Ensure all axes except for self.__axes__ are move to the start
+        # Move this flat axis to the end for multiplication with reflection matrices
         x = utt.move_axis(x=x, from_index=self.__axes__[0], to_index=-1)
 
         # Reflect
         y_hat = self.__reflect__(x=x)
 
         # Move axis back to where it came from
-        x = utt.move_axis(x=y_hat, from_index=-1, to_index=self.__axes__[0])
+        y_hat = utt.move_axis(x=y_hat, from_index=-1, to_index=self.__axes__[0])
 
         # Unflatten to restore original shape
         y_hat = tf.reshape(y_hat, shape=old_shape)
@@ -656,9 +658,9 @@ class SequentialFlowNetwork(FlowLayer):
 
 class SupervisedFactorNetwork(SequentialFlowNetwork):
 
-    def __init__(self, sequence: List[FlowLayer], factor_channel_count: List[int], **kwargs):
+    def __init__(self, sequence: List[FlowLayer], factor_dimension_count: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
-        self.__loss__ = mls.SupervisedFactorLoss(factor_channel_counts=factor_channel_count)
+        self.__loss__ = mls.SupervisedFactorLoss(factor_dimension_counts=factor_dimension_count)
 
     def train_step(self, data):
         """_summary_

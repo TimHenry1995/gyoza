@@ -23,28 +23,28 @@ class SupervisedFactorLoss():
         choose, for instance, its default value of 0,975 if training instances in the form of animal pictures are based on clearly 
         recognizable species. It should be chosen equal to e.g. 0.5 if there is a lot of fluctuation in e.g furr length, size or shape.  
     :type sigma: float, optional
-    :param channels_per_factor: A list of integers that enumerates the number of channels (entries in a vector) of the factors thought to underly
+    :param dimensions_per_factor: A list of integers that enumerates the number of dimensions (entries in a vector) of the factors thought to underly
         the representation of z_tilde. These shall include the residual factor at index 0 which collect all variation not captured by the 
-        true factors. The sum of all entries is assumed to be equal to the number of channels in z_tilde.
-    :type channels_per_factor: List[int] 
+        true factors. The sum of all entries is assumed to be equal to the number of dimensions in z_tilde.
+    :type dimensions_per_factor: List[int] 
 
     References:
         - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
     """
 
-    def __init__(self, factor_channel_counts: List[int], sigma: float = 0.975, *args):
+    def __init__(self, factor_dimension_counts: List[int], sigma: float = 0.975, *args):
         
         # Super
         super(SupervisedFactorLoss, self).__init__(*args)
 
         # Attributes
-        factor_masks = np.zeros(shape=[len(factor_channel_counts), np.sum(factor_channel_counts)])
+        factor_masks = np.zeros(shape=[len(factor_dimension_counts), np.sum(factor_dimension_counts)])
         total = 0
-        for u, channel_count in enumerate(factor_channel_counts): 
-            factor_masks[u, total:total+channel_count] = 1
-            total += channel_count
+        for u, dimension_count in enumerate(factor_dimension_counts): 
+            factor_masks[u, total:total+dimension_count] = 1
+            total += dimension_count
         self.__factor_masks__ = tf.constant(factor_masks, dtype=tf.keras.backend.floatx()) 
-        """Collects masks (one per factor) that are 1 for each factor's channels and zero elsewhere. Shape == [factor count, channel count]"""
+        """Collects masks (one per factor) that are 1 for each factor's dimensions and zero elsewhere. Shape == [factor count, dimension count]"""
 
         self.__sigma__ = sigma
         """Hyperparameter in (0,1) indicating association strength between pairs of instances."""
@@ -65,8 +65,8 @@ class SupervisedFactorLoss():
         :param y_pred: A tuple containing [z_tilde_a, z_tilde_b, j_a, j_b]. 
         :type y_pred: Tuple[:class:`tensorflow.Tensor`]
 
-        - z_tilde_a (:class:`tensorflow.Tensor`) - The output of model T on the first input of the pair z^a, z^b. Shape == [batch size, channel count] where channel count is the number of channels in the flattened output of T.
-        - z_tilde_b (:class:`tensorflow.Tensor`) - The output of model T on the second input of the pair z^a, z^b. Shape == [batch size, channel count] where channel count is the number of channels in the flattened output of T.
+        - z_tilde_a (:class:`tensorflow.Tensor`) - The output of model T on the first input of the pair z^a, z^b. Shape == [batch size, dimension count] where dimension count is the number of dimensions in the flattened output of T.
+        - z_tilde_b (:class:`tensorflow.Tensor`) - The output of model T on the second input of the pair z^a, z^b. Shape == [batch size, dimension count] where dimension count is the number of dimensions in the flattened output of T.
         - j_a (:class:`tensorflow.Tensor`) - The jacobian determinant on logarithmic scale of T at z^a. Shape == [batch size]
         - j_b (:class:`tensorflow.Tensor`) - The jacobian determinant on logarithmic scale of T at z^b. Shape == [batch size]
 
@@ -76,11 +76,11 @@ class SupervisedFactorLoss():
         # Input validity
         assert len(y_pred) == 4, f"The input y_pred is expected to be a tuple of the four tensorflow.Tensor objects z_tilde_a, z_tilde_b, j_a and j_b."
         z_tilde_a, z_tilde_b, j_a, j_b = y_pred
-        assert len(z_tilde_a.shape) == 2, f"z_tilde_a has shape {z_tilde_a.shape} but was expected to have shape [batch size, channel count]."
-        assert len(z_tilde_b.shape) == 2, f"z_tilde_b has shape {z_tilde_b.shape} but was expected to have shape [batch size, channel count]."
-        assert z_tilde_a.shape == z_tilde_b.shape, f"The inputs z_tilde_a and z_tilde_b where expected to have the same shape [batch size, channel count] but found {z_tilde_a.shape} and {z_tilde_b.shape}, respectively."
-        assert (z_tilde_a.shape[1] == self.__factor_masks__.shape[1]), f"z_tilde_a was expected to have as many channels along axis 1 as the sum of channels in channels_per_factor specified during initialization ({self.__factor_masks__.shape[1]}) but it has {z_tilde_a.shape[1]}."
-        assert (z_tilde_b.shape[1] == self.__factor_masks__.shape[1]), f"z_tilde_b was expected to have as many channels along axis 1 as the sum of channels in channels_per_factor specified during initialization ({self.__factor_masks__.shape[1]}) but it has {z_tilde_b.shape[1]}."
+        assert len(z_tilde_a.shape) == 2, f"z_tilde_a has shape {z_tilde_a.shape} but was expected to have shape [batch size, dimension count]."
+        assert len(z_tilde_b.shape) == 2, f"z_tilde_b has shape {z_tilde_b.shape} but was expected to have shape [batch size, dimension count]."
+        assert z_tilde_a.shape == z_tilde_b.shape, f"The inputs z_tilde_a and z_tilde_b where expected to have the same shape [batch size, dimension count] but found {z_tilde_a.shape} and {z_tilde_b.shape}, respectively."
+        assert (z_tilde_a.shape[1] == self.__factor_masks__.shape[1]), f"z_tilde_a was expected to have as many dimensions along axis 1 as the sum of dimensions in dimensions_per_factor specified during initialization ({self.__factor_masks__.shape[1]}) but it has {z_tilde_a.shape[1]}."
+        assert (z_tilde_b.shape[1] == self.__factor_masks__.shape[1]), f"z_tilde_b was expected to have as many dimensions along axis 1 as the sum of dimensions in dimensions_per_factor specified during initialization ({self.__factor_masks__.shape[1]}) but it has {z_tilde_b.shape[1]}."
     
         assert len(j_a.shape) == 1, f"The input j_a was expected to have shape [batch size] but found {j_a.shape}."
         assert len(j_b.shape) == 1, f"The input j_b was expected to have shape [batch size] but found {j_b.shape}."
@@ -91,8 +91,8 @@ class SupervisedFactorLoss():
         assert y_true.shape[0] == z_tilde_a.shape[0], f"The inputs y_true and z_tilde are assumed to have the same number of instances in the batch. Found {y_true.shape[0]} and {z_tilde_a.shape[0]}, respectively."
         
         # Convenience variables
-        channel_count =  z_tilde_a.shape[1] 
-        factor_mask = np.zeros([y_true.shape[0], channel_count], dtype=tf.keras.backend.floatx()) # Is 1 for all channels of factors shared by a pair z_a, z_b and 0 elsewhere
+        dimension_count =  z_tilde_a.shape[1] 
+        factor_mask = np.zeros([y_true.shape[0], dimension_count], dtype=tf.keras.backend.floatx()) # Is 1 for all dimensions of factors shared by a pair z_a, z_b and 0 elsewhere
         for i, instance in enumerate(y_true):
             for f, similarity in enumerate(instance): # f = factor index
                 factor_mask[i] = factor_mask[i] + similarity * self.__factor_masks__[f]
@@ -116,9 +116,9 @@ class SupervisedFactorLoss():
         # This leads points a and b (if they are labelled distinct) to be far away from each other
         term_distance = 0#tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
         
-        # This leads the channels of the output to be orthogonal
+        # This leads the dimensions of the output to be orthogonal
         cov = 0#tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
-        term_cov = 0#tf.reduce_sum(tf.pow(cov - tf.eye(channel_count, dtype=tf.keras.backend.floatx()), 2))
+        term_cov = 0#tf.reduce_sum(tf.pow(cov - tf.eye(dimension_count, dtype=tf.keras.backend.floatx()), 2))
         loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_distance + term_cov, axis=0)  # Shape == [1]
         print(cov)
         # Outputs

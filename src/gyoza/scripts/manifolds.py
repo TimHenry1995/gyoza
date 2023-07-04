@@ -121,13 +121,13 @@ if False:
 def create_model() -> mfl.FlowLayer:
     dimensionality = 2
     compute_coupling_parameters_1 = msl.BasicFullyConnectedNet(latent_channel_count=4*dimensionality, output_channel_count=dimensionality, depth=3)
-    mask_1 = gmm.SquareWave1D(axes=[1], shape=[dimensionality])
+    mask_1 = gmm.SquareWaveSingleAxis(axes=[1], shape=[dimensionality])
     compute_coupling_parameters_2 = msl.BasicFullyConnectedNet(latent_channel_count=4*dimensionality, output_channel_count=dimensionality, depth=3)
-    mask_2 = gmm.SquareWave1D(axes=[1], shape=[dimensionality])
+    mask_2 = gmm.SquareWaveSingleAxis(axes=[1], shape=[dimensionality])
     compute_coupling_parameters_3 = msl.BasicFullyConnectedNet(latent_channel_count=4*dimensionality, output_channel_count=dimensionality, depth=3)
-    mask_3 = gmm.SquareWave1D(axes=[1], shape=[dimensionality])
+    mask_3 = gmm.SquareWaveSingleAxis(axes=[1], shape=[dimensionality])
     compute_coupling_parameters_4 = msl.BasicFullyConnectedNet(latent_channel_count=4*dimensionality, output_channel_count=dimensionality, depth=3)
-    mask_4 = gmm.SquareWave1D(axes=[1], shape=[dimensionality])
+    mask_4 = gmm.SquareWaveSingleAxis(axes=[1], shape=[dimensionality])
     
     network = mfl.SupervisedFactorNetwork(sequence=[
         mfl.AdditiveCoupling(axes=[1], shape=[dimensionality], compute_coupling_parameters=compute_coupling_parameters_1, mask=mask_1), 

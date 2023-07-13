@@ -21,7 +21,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         """Tests whether an instance of AdditiveCoupling can be created for a 2-axes coupling."""
 
         # Initialize
-        compute_coupling_parameters = msl.ChannelWiseConvolution2D(layer_count=1, conv2D_kwargs={'filters':1, 'kernel_size':2, 'padding':'same', 'activation':'tanh'}) 
+        compute_coupling_parameters = msl.ChannelWiseConvolutionTwoAxes(layer_count=1, conv2D_kwargs={'filters':1, 'kernel_size':2, 'padding':'same', 'activation':'tanh'}) 
         
         mask = mms.SquareWaveTwoAxes(axes=[1,2], shape=[2,5]) 
         mfl.AdditiveCoupling(axes=[1,2], shape=[2,5],compute_coupling_parameters=compute_coupling_parameters, mask=mask)

@@ -39,7 +39,7 @@ class BasicFullyConnectedNet(tf.keras.Model):
         # Outputs:
         return y_hat
     
-class ChannelWiseConvolution2D(tf.keras.Model):
+class ChannelWiseConvolutionTwoAxes(tf.keras.Model):
     """This class provides a sequential convolutional neural network that applies the same spatial filters to each dimension.
 
     :param layer_count: The number of layers.
@@ -51,7 +51,7 @@ class ChannelWiseConvolution2D(tf.keras.Model):
     def __init__(self, layer_count:int = 3, conv2D_kwargs: Dict[str, Any] = {}):
 
         # Super
-        super(ChannelWiseConvolution2D, self).__init__()
+        super(ChannelWiseConvolutionTwoAxes, self).__init__()
 
         # Create layers
         layers = [None] * (layer_count + 2)

@@ -376,7 +376,7 @@ class AffineCoupling(Coupling):
 
 class ActivationNormalization(FlowLayer):
     """A trainable location and scale transformation of the data. For each dimension of the specified input shape, a scale and a location 
-    parameter is used. That is, if shape = [width, height] then 2 * width * height many parameters are used. Each pair of location and
+    parameter is used. That is, if shape == [width, height], then 2 * width * height many parameters are used. Each pair of location and
     scale is initialized to produce mean equal to 0 and variance equal to 1 for its dimension. To allow for invertibility, the scale parameter 
     has to be non-zero and is therefore chosen to be on an exponential scale. Each dimension thus has the following activation 
     normalization:
@@ -400,10 +400,10 @@ class ActivationNormalization(FlowLayer):
         super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__location__ = tf.Variable(tf.zeros(shape), trainable=True, name="__location__")
+        self.__location__ = tf.Variable(tf.zeros(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__location__")
         """The value by which each data point shall be translated."""
 
-        self.__scale__ = tf.Variable(tf.ones(shape), trainable=True, name="__scale__")
+        self.__scale__ = tf.Variable(tf.ones(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__scale__")
         """The value by which each data point shall be scaled."""
 
         self.__is_initialized__ = False
@@ -420,16 +420,18 @@ class ActivationNormalization(FlowLayer):
 
         # Flatten other axes
         other_axes = list(range(len(x.shape)))[:-len(self.__axes__)]
-        x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes] + self.__shape__
+        x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes, *self.__shape__]
 
         # Compute mean and standard deviation 
         mean = tf.stop_gradient(tf.math.reduce_mean(x, axis=0)) # Shape == self.__shape__ 
         standard_deviation = tf.stop_gradient(tf.math.reduce_std(x, axis=0)) # Shape == self.__shape__ 
         
-        # Update attributes
+        # Update attributes first call will have standardizing effect
         self.__location__.assign(mean)
-        scale = tf.math.log(standard_deviation+1e-16) # To initialze it for unit variance we need to use log here
-        self.__scale__.assign(scale)
+        self.__scale__.assign(standard_deviation)
+
+        # Update initialization state
+        self.__is_initialized__ = True
 
     def __prepare_variables_for_computation__(self, x:tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
         """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
@@ -456,7 +458,7 @@ class ActivationNormalization(FlowLayer):
 
         # Transform
         location, scale = self.__prepare_variables_for_computation__(x=x)
-        y_hat = (x-location) / (tf.math.exp(scale))
+        y_hat = (x - location) / scale
 
         # Outputs
         return y_hat
@@ -465,14 +467,14 @@ class ActivationNormalization(FlowLayer):
 
         # Transform
         scale, location = self.__prepare_variables_for_computation__(x=y_hat)
-        x = tf.math.exp(scale) * y_hat + location
+        x =  y_hat * scale + location
 
         # Outputs
         return x
            
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Count elements per instance 
+        # Count dimensions over remaining axes (for a single instance)
         batch_size = x.shape[0]
         dimension_count = 1
         for axis in range(1,len(x.shape)):
@@ -480,12 +482,10 @@ class ActivationNormalization(FlowLayer):
                 dimension_count *= x.shape[axis] 
         
         # Compute logarithmic determinant
-        # By defintion: sum across dimensions for ln(1/scale), where scale = exp(self.__scale__)
-        # Rewriting to: sum across dimensions for ln(0) - ln(scale)
-        # Rewriting to: -1 * sum across dimensions for ln(scale)
-        # rewriting to: -1 * sum across dimensions for ln(exp(self.__scale__)) which results in:
-        logarithmic_determinant = -1 * dimension_count * tf.math.reduce_sum(self.__scale__) # All dimensions for a single instance 
-        logarithmic_determinant = tf.ones(shape=[batch_size]) * logarithmic_determinant
+        # By defintion: sum across dimensions for ln(scale), where scale = exp(self.__scale__)
+        # rewriting to: sum across dimensions for ln(exp(self.__scale__)) which results in:
+        logarithmic_determinant = - dimension_count * tf.math.reduce_sum(tf.math.log(self.__scale__)) # single instance 
+        logarithmic_determinant = tf.ones(shape=[batch_size], dtype=tf.keras.backend.floatx()) * logarithmic_determinant
 
         # Outputs
         return logarithmic_determinant
@@ -514,7 +514,7 @@ class Reflection(FlowLayer):
 
         # Attributes
         dimension_count = tf.reduce_prod(shape).numpy()
-        reflection_normals = tf.math.l2_normalize(tf.random.uniform(shape=[reflection_count, dimension_count]), axis=1) 
+        reflection_normals = tf.math.l2_normalize(tf.random.uniform(shape=[reflection_count, dimension_count], dtype=tf.keras.backend.floatx()), axis=1) 
         
         self.__reflection_normals__ = tf.Variable(reflection_normals, trainable=True, name="reflection_normals") # name is needed for getting and setting weights
         """(:class:`tensorflow.Tensor`) - These are the axes along which an instance is reflected. Shape == [reflection count, dimension count] where dimension count is the product of the shape of the input instance along :py:attr:`self.__axes__`."""

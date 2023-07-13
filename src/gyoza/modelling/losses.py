@@ -108,19 +108,19 @@ class SupervisedFactorLoss():
         term_7 = 0.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
         
         # This leads points b to be normal along residual factor and all the factors where they are labelled distinct
-        term_8 = 0.5 * tf.reduce_sum((1-factor_mask) * tf.pow(z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
+        term_8 = 0#.5 * tf.reduce_sum((1-factor_mask) * tf.pow(z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
         
         # This leads points a and b (if they are labelled a similar) to be close to each other
-        term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2), axis=1)   # Shape == [batch size]
+        term_9 = 0#.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2), axis=1)   # Shape == [batch size]
         
         # This leads points a and b (if they are labelled distinct) to be far away from each other
         term_distance = 0#tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
         
         # This leads the dimensions of the output to be orthogonal
-        cov = 0#tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
-        term_cov = 0#tf.reduce_sum(tf.pow(cov - tf.eye(dimension_count, dtype=tf.keras.backend.floatx()), 2))
+        cov = tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
+        term_cov = 0.5 * (cov.shape[0]**2 - cov.shape[0]) * tf.reduce_sum(tf.pow(cov * (1.0 - tf.eye(dimension_count, dtype=tf.keras.backend.floatx())), 2))
         loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_distance + term_cov, axis=0)  # Shape == [1]
-        print(cov)
+        
         # Outputs
         return loss
 

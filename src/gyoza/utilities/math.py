@@ -26,6 +26,17 @@ def archimedian_spiral(xs, alpha):
 
     return xs, ys
 
+def logarithmic_spiral(xs, alpha, beta):
+    phi = xs
+
+    # Transform
+    rho = alpha * np.exp(beta*phi) 
+
+    # Convert to cartesian
+    xs, ys = polar_to_cartesian(rho=rho, phi=phi)
+
+    return xs, ys
+
 def rotate(xs, ys, theta):
     # Convert to polar
     rho, phi = cartesian_to_polar(x=xs, y=ys)

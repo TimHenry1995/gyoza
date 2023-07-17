@@ -3,33 +3,48 @@ import numpy as np
 from typing import List, Tuple
 
 class UnsupervisedFactorLoss():
-    pass
+    r"""k
+    :math:` \tilde{z}'
+    n
+    """ 
 
 class SupervisedFactorLoss():
-    """This loss can be used to incentivize the entries of the output vector of a normalizing flow network to be arranged according to
-    semantic factors of the data. Take the network z^~ = T(z) which accepts data z as input (e.g. a latent representation of a 
-    classical auto-encoder) and shall output and a multivariate normal distribution z^~ that arranges its entries as such factors.
-    The factors can be thought of as independent components. A factor k spreading across N_k entries of the output vector is 
-    incentivised by this loss to represent the similarity of two inputs z^a and z^b along one and only one concept. For instance, 
-    factors can represent color, roughness, size, animal species, or material. The loss expects training instances to come in 
-    pairs z^a and z^b for each such factor. A pair should have strong positive association ``sigma`` such that the corresponding 
-    factor can capture the underlying concept of similarity. Yet, the association shall be close to zero for all other concepts
-    (on average), i.e. all other factors. If the labelling of the data is too coarse to provide such pairs, one can use style 
-    transfer models built externally to construct pairs with similar style. If it is impossible to construct pairs, one can also 
-    use the :class:`UnsupervisedFactorLoss` instead.
+    r"""
+    This loss can be used to incentivize the entries of the output vector of a flow network to be arranged according to semantic 
+    factors of the data with multivariate normal distribution. It implements the following formula:
 
-    :param sigma: This hyperparameter refletcs the category resemblance of instances. It is chosen to be in the interval (0,1) and 
-        should be clos to 1 for cohesive categories and close to 0 for categories that only loosely apply to their instances. One can 
-        choose, for instance, its default value of 0,975 if training instances in the form of animal pictures are based on clearly 
-        recognizable species. It should be chosen equal to e.g. 0.5 if there is a lot of fluctuation in e.g furr length, size or shape.  
+    .. math:: 
+        \mathcal{L} = \sum_{F=1}^{K} \mathbb{E}_{(z^a,z^b) \sim p(z^a, z^b | F) } l(z^a, z^b | F)
+
+    .. math:: 
+        :nowrap:
+
+        \begin{eqnarray}
+            l(z^a,z^b | F) &= \frac{1}{2} \sum_{k=0}^{K} ||T(z^a)_k||^2 - log|T'(z^a)| \\
+                &+ \frac{1}{2} \sum_{k \neq F} ||T(z^b)_k||^2 - log(T'(z^b)) \\
+                &+ \frac{1}{2} \frac{||T'(z^b)_F - \sigma_{ab} T(z^a)_F||^2}{1-\sigma_{ab}^2},
+        \end{eqnarray}
+        
+    where :math:`T(z)` is the model whose loss shall be computed, :math:`z^a`, :math:`z^b` are instances passed trough :math:`T`,
+    :math:`T'(z^a)` is the Jacobian of :math:`T` and :math:`\sigma_{ab}` is the clustering strength of instances (see below). 
+    The factors can be thought of as independent components. A factor :math:`k` spreading across :math:`N_k` entries of the 
+    output vector is incentivised by this loss to represent the similarity of two inputs :math:`z^a` and :math:`z^b` along one and 
+    only one concept. For instance, factors can represent color, roughness, size, animal species, or material. The loss expects 
+    training instances to come in pairs :math:`z^a` and :math:`z^b` for each such factor. A pair should have strong positive 
+    association :math:`\sigma` such that the corresponding factor can capture the underlying concept of similarity. Yet, the 
+    association shall be (on average) close to zero for all other factors. See also :class:`UnsupervisedFactorLoss`.
+
+    :param sigma: This hyperparameter refletcs the clustering strength of instances in general. It is chosen to be in the interval 
+        (0,1) exclusive and should be close to 1 when instances supervised to be similar shall cluster tightly together or set to a
+        value closer to 0 when clustering shall be more dispersed.
     :type sigma: float, optional
     :param dimensions_per_factor: A list of integers that enumerates the number of dimensions (entries in a vector) of the factors thought to underly
-        the representation of z_tilde. These shall include the residual factor at index 0 which collect all variation not captured by the 
-        true factors. The sum of all entries is assumed to be equal to the number of dimensions in z_tilde.
+        the representation of :math:`z^{\sim}`. These shall include the residual factor at index 0 which collect all variation not captured by the 
+        true factors. The sum of all entries is assumed to be equal to the number of dimensions in :math:`z^{\sim}`.
     :type dimensions_per_factor: List[int] 
 
     References:
-        - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
+        - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
 
     def __init__(self, factor_dimension_counts: List[int], sigma: float = 0.975, *args):
@@ -47,7 +62,7 @@ class SupervisedFactorLoss():
         """Collects masks (one per factor) that are 1 for each factor's dimensions and zero elsewhere. Shape == [factor count, dimension count]"""
 
         self.__sigma__ = sigma
-        """Hyperparameter in (0,1) indicating association strength between pairs of instances."""
+        """Hyperparameter in (0,1) indicating clustering strength between pairs of instances."""
 
     def compute(self,y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
         """Computes the loss.
@@ -92,7 +107,7 @@ class SupervisedFactorLoss():
         
         # Convenience variables
         dimension_count =  z_tilde_a.shape[1] 
-        factor_mask = np.zeros([y_true.shape[0], dimension_count], dtype=tf.keras.backend.floatx()) # Is 1 for all dimensions of factors shared by a pair z_a, z_b and 0 elsewhere
+        factor_mask = np.zeros([y_true.shape[0], dimension_count], dtype=tf.keras.backend.floatx()) # Is 1 for all dimensions of factors shared by a pair z^a, z^b and 0 elsewhere
         for i, instance in enumerate(y_true):
             for f, similarity in enumerate(instance): # f = factor index
                 factor_mask[i] = factor_mask[i] + similarity * self.__factor_masks__[f]
@@ -108,17 +123,17 @@ class SupervisedFactorLoss():
         term_7 = 0.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
         
         # This leads points b to be normal along residual factor and all the factors where they are labelled distinct
-        term_8 = 0#.5 * tf.reduce_sum((1-factor_mask) * tf.pow(z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
+        term_8 = 0.5 * tf.reduce_sum((1-factor_mask) * tf.pow(z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
         
-        # This leads points a and b (if they are labelled a similar) to be close to each other
-        term_9 = 0#.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2), axis=1)   # Shape == [batch size]
+        # This leads points a and b (if they are labelled similar) to be close to each other
+        term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2), axis=1)   # Shape == [batch size]
         
         # This leads points a and b (if they are labelled distinct) to be far away from each other
         term_distance = 0#tf.reduce_sum((1-factor_mask) * 1.0 / (1+tf.pow((z_tilde_b - z_tilde_a), 2)), axis=1)
         
         # This leads the dimensions of the output to be orthogonal
-        cov = tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
-        term_cov = 0.5 * (cov.shape[0]**2 - cov.shape[0]) * tf.reduce_sum(tf.pow(cov * (1.0 - tf.eye(dimension_count, dtype=tf.keras.backend.floatx())), 2))
+        #cov = tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
+        term_cov = 0#.5 * (cov.shape[0]**2 - cov.shape[0]) * tf.reduce_sum(tf.pow(cov * (1.0 - tf.eye(dimension_count, dtype=tf.keras.backend.floatx())), 2))
         loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_distance + term_cov, axis=0)  # Shape == [1]
         
         # Outputs

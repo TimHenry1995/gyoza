@@ -4,6 +4,14 @@ gyoza.modelling package
 Submodules
 ----------
 
+gyoza.modelling.data\_iterators module
+--------------------------------------
+
+.. automodule:: gyoza.modelling.data_iterators
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 gyoza.modelling.flow\_layers module
 -----------------------------------
 

@@ -7,6 +7,7 @@ from gyoza.utilities import tensors as utt
 import gyoza.modelling.masks as mms
 import copy as cp
 from gyoza.modelling import losses as mls
+import random
 
 class FlowLayer(tf.keras.Model, ABC):
     """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
@@ -23,11 +24,12 @@ class FlowLayer(tf.keras.Model, ABC):
 
     References:
 
-        - "Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio.
-        - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
-        - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh, David Krueger and Yoshua Bengio
-        - "GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images" by Aadhithya Sankar, Matthias Keicher, Rami Eisawy, Abhijeet Parida, Franz Pfister, Seong Tae Kim and  Nassir Navab1,6,†
-        - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
+        - `"Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal. <https://arxiv.org/abs/1807.03039>`_
+        - `"NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh, David Krueger and Yoshua Bengio <https://arxiv.org/abs/1410.8516>`_
+        - `"GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images" by Aadhithya Sankar, Matthias Keicher, Rami Eisawy, Abhijeet Parida, Franz Pfister, Seong Tae Kim and  Nassir Navab <https://arxiv.org/abs/2103.10868>`_
+        - `"Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon <https://arxiv.org/abs/2003.01941>`_
+        - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
 
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
@@ -81,19 +83,30 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
-class Shuffle(FlowLayer):
-    """Shuffles inputs along the given axes. The permutation used for shuffling is randomly chosen once during initialization. 
-    Thereafter it is saved as a private attribute. Shuffling is thus deterministic from there on.
+class Permutation(FlowLayer):
+    """This layer permutes the dimensions along the specified ``axes`` using the provided ``permutation``. 
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param permutation: This layer flattens the input along ``axes`` and then uses ``permutation`` to reorder the dimensions. The 
+        ``permutation`` is simply a new order of the indices between 0 and excluding dimension count, where dimension count is the
+        product of dimensions in ``shape``.
+    :type permutation: List[int]
     """
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], permutation: List[int], **kwargs):
+
+        # Input validity
+        dimension_count = tf.reduce_prod(shape).numpy()
+        assert len(permutation) == dimension_count, f'The input permutation was expected to have length {dimension_count} based on the number of dimensions in the shape input but it was found to have length {len(permutation)}.'
 
         # Super
-        super(Shuffle, self).__init__(shape=shape, axes=axes, **kwargs)
-        
+        super(Permutation, self).__init__(shape=shape, axes=axes, **kwargs)
+    
         # Attributes
-        dimension_count = tf.reduce_prod(shape).numpy()
-        permutation = tf.range(dimension_count,0,delta=-1)-1#tf.random.shuffle(tf.range(dimension_count))
+        permutation = tf.constant(permutation)
         self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
         self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
         
@@ -140,15 +153,65 @@ class Shuffle(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
+class Shuffle(Permutation):
+    """Shuffles input along the given axes. The permutation used for shuffling is randomly chosen once during initialization. 
+    Thereafter it is saved as a private attribute. Shuffling is thus deterministic.
+    
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Super
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = list(range(dimension_count)); random.shuffle(permutation)
+        super(Shuffle, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+    
+class Swop(Permutation):
+    """Processes the input by first flattening along the given axes, then swopping the first and second half and fianlly unflattening.
+    
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Super
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
+        super(Swop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+    
+class HeaviSideSwop(Swop):
+    pass
+
 class Coupling(FlowLayer, ABC):
-    """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
-    obtains two copies of x, referred to as x_1, x_2 using a binary mask and its negative (1-mask), respectively. The half x_1 
-    is mapped to coupling parameters via a user-provided model, called :py:meth:``compute_coupling_parameters``. This can be e.g. an 
-    artificial neural network. Next, :py:meth:`call` uses the internally defined :py:meth:`__couple__` method to couple x_2 with 
-    those parameters. This coupling is designed to be trivially invertible, given the parameters. It can be for instance y_hat = 
-    x + parameters, which has the trivial inverse x = y_hat - parameters. Due to the splitting of x and the fact that 
-    :py:func:`compute_coupling_parameters` will only be evaluated in the forward direction, the overall :py:meth:`call` 
-    method will be trivially invertible. Similarly, its Jacobian determinant remains trivial and thus tractable.
+    r"""This layer couples the input :math:`x` with itself inside the method :py:meth:`call` by implementing the following formulae:
+    
+    .. math::
+        :nowrap:
+
+        \begin{eqnarray}
+            x_1 & = w * x \\
+            x_2 & = (1-w) * x \\
+            y_1 & = x_1 \\
+            y_2 & = f(x_2, c(x_1)) \\
+            y   & = y_1 + y_2,
+        \end{eqnarray}
+
+    where :math:`w` is a binary ``mask`` that is equal to 1 for half of the coupling dimensions (see ``shape``, ``axes``) and 0 for 
+    the remaining dimensions. The function :math:`c(x)` is also called :py:meth:``compute_coupling_parameters`` (see below) and the 
+    function :math:`f` is the coupling law. As can be seen from the formula, the ``mask`` :math:`w` is used to select half of
+    the input :math:`x` in :math:`x_1` and the other half in :math:`x_2`. While :math:`y_1` is set equal to :math:`x_1`, the main
+    contribution of this layer is in the computation of :math:`y_2`. That is, :math:`y_2` is computed as the trivial combination :math:`f` 
+    (for example sum or product) of :math:`x_2` and coupling parameters :math:`c(x_1)`. The function :math:`c(x)` is a model of 
+    arbitrary complexity and it is thus possible to create non-linear mappings from :math:`x` to :math:`y`. The coupling law :math:`f` is
+    chosen by this layer to be trivially invertible and to have tractable Jacobian determinant which allows for the overall layer to 
+    elicit these two properties, too.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -162,8 +225,8 @@ class Coupling(FlowLayer, ABC):
     
     References:
 
-        - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh and David Krueger and Yoshua Bengio.
-        - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
+        - `"NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh and David Krueger and Yoshua Bengio. <https://arxiv.org/abs/1410.8516>`_
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
     def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask, **kwargs):
@@ -283,7 +346,13 @@ class Coupling(FlowLayer, ABC):
         return x
     
 class AdditiveCoupling(Coupling):
-    """This coupling layer implements an additive coupling of the form y = x + parameters"""
+    """This coupling layer implements an additive coupling of the form :math:`f(x_2, c(x_1) = x_2 + c(x_1)`. For details on the
+    encapsulating theory refer to :class:`Coupling`.
+    
+    References:
+
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
+    """
 
     def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
         
@@ -316,8 +385,14 @@ class AdditiveCoupling(Coupling):
         return logarithmic_determinant
 
 class AffineCoupling(Coupling):
-    """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
-    and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
+    """This coupling layer implements an affine coupling of the form :math:`f(x_2, c(x_1) = e^s x_2 + t`, where :math:`s, t = c(x)`. 
+    To prevent division by zero during decoupling, the exponent of :math:`s` is used as scale. For details on the encapsulating 
+    theory refer to :class:`Coupling`. 
+    
+    References:
+
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
+    """
 
     def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
         
@@ -390,8 +465,8 @@ class ActivationNormalization(FlowLayer):
     
     References:
 
-    - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
-    - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
+    - `"Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal. <https://arxiv.org/abs/1807.03039>`_
+    - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer. <https://arxiv.org/abs/2004.13166>`_
     """
     
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
@@ -428,7 +503,7 @@ class ActivationNormalization(FlowLayer):
         
         # Update attributes first call will have standardizing effect
         self.__location__.assign(mean)
-        self.__scale__.assign(standard_deviation)
+        self.__scale__.assign(tf.math.log(standard_deviation))
 
         # Update initialization state
         self.__is_initialized__ = True
@@ -447,6 +522,7 @@ class ActivationNormalization(FlowLayer):
         for axis in self.__axes__: axes.remove(axis)
         location = utt.expand_axes(x=self.__location__, axes=axes)
         scale = utt.expand_axes(x=self.__scale__, axes=axes)
+        scale = tf.math.exp(scale) # This is to prevent division by zero in call and to simplify the Jacobian determinant
 
         # Outputs
         return location, scale
@@ -466,7 +542,7 @@ class ActivationNormalization(FlowLayer):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
 
         # Transform
-        scale, location = self.__prepare_variables_for_computation__(x=y_hat)
+        location, scale = self.__prepare_variables_for_computation__(x=y_hat)
         x =  y_hat * scale + location
 
         # Outputs
@@ -484,28 +560,28 @@ class ActivationNormalization(FlowLayer):
         # Compute logarithmic determinant
         # By defintion: sum across dimensions for ln(scale), where scale = exp(self.__scale__)
         # rewriting to: sum across dimensions for ln(exp(self.__scale__)) which results in:
-        logarithmic_determinant = - dimension_count * tf.math.reduce_sum(tf.math.log(self.__scale__)) # single instance 
+        logarithmic_determinant = - dimension_count * tf.math.reduce_sum(self.__scale__) # single instance 
         logarithmic_determinant = tf.ones(shape=[batch_size], dtype=tf.keras.backend.floatx()) * logarithmic_determinant
 
         # Outputs
         return logarithmic_determinant
 
 class Reflection(FlowLayer):
-    """This layer reflects a data point around ``reflection_count`` learnable normals using the :ref:`Householder transform 
-    <https://en.wikipedia.org/wiki/Householder_transformation>`: . In this context, the normal is the unit length vector orthogonal 
-    to the hyperplane of reflection. When ``axes`` contains more than a single entry, the input is first flattened along these
-    axes, then reflected and then unflattened to original shape.
+    """This layer reflects a data point around ``reflection_count`` learnable normals using the `Householder transform 
+    <https://en.wikipedia.org/wiki/Householder_transformation>`_. In this context, the normal is the unit length vector orthogonal to
+    the hyperplane of reflection. When ``axes`` contains more than a single entry, the input is first flattened along these axes, 
+    then reflected and then unflattened to original shape.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`. IMPORTANT: These axes are distinct from the learnable reflection axes.
+    :param axes: See base class :class:`FlowLayer`. **IMPORTANT**: These axes are distinct from the learnable reflection axes.
     :type axes: List[int]
     :param reflection_count: The number of successive reflections that shall be executed.
     :type reflection_count: int
 
     Referenes:
 
-        - "Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon
+        - `"Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon <https://arxiv.org/abs/2003.01941>`_
     """
 
     def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs):

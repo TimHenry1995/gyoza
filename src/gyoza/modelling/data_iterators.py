@@ -10,7 +10,7 @@ class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
     """This class provides functionality to iterates instances x_a of the data and finds for each of them an arbitrarily selected x_b 
     such that they form a pair. The X outputs will be batches of such pairs while the Y outputs will be the corresponding batches of
     factor-wise label equality. That is, the Y_i for pair X_i will be a vector of length factor count indicating label equality with 1
-    and inequality with zero. X thus has shape [``batch_size``, 2, *``x_shape``] and Y has shape [``batch_size``, factor count].
+    and inequality with zero. X thus has shape [``batch_size``, 2, * ``x_shape`` ] and Y has shape [``batch_size``, factor count].
     
     :param data_path: Path to the folder that contains the inputs that shall be paired based on ``label``.
     :type data_path: str
@@ -52,7 +52,7 @@ class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
         :type index: int
 
         :return:
-            - X (:class:`tensorflow.Tensor`) - A pairs of instances x_a, x_b. The x_a instance is always taken from the batch of instances in range [``index``, ``index``+:py:attr:`self.batch_size`]` (in order), while x_b is drawn uniformly at random from :py:attr:`self.__indices__`. Shape == [len(indices), 2, :py:attr:`self.__shape__`].
+            - X (:class:`tensorflow.Tensor`) - A pairs of instances x_a, x_b. The x_a instance is always taken from the batch of instances in range [``index``, ``index``+:py:attr:`self.batch_size`] (in order), while x_b is drawn uniformly at random from :py:attr:`self.__indices__`. Shape == [len(indices), 2, :py:attr:`self.__shape__`].
             - Y (:class`tensorflow.Tensor`) - A tensor of ones and zeros with shape == [:py:attr:`batch_size`, factor count], indicating for each factor wether the two instances have the same label or not.
         """
         
@@ -121,9 +121,10 @@ def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_f
 
     :return: 
         - X_a_b (:class:`tensorflow.Tensor`) - A batch of instance pairs of shape [<=`batch_size`,
-        2, ...], where 2 is due to the concatenation of X_a and X_b and ... is the same instance-wise shape as for ``X``. 
+            2, ...], where 2 is due to the concatenation of X_a and X_b and ... is the same instance-wise shape as for ``X``. 
         - Y_a_b (:class:`tensorflow.Tensor`) - The corresponding batch of similarities as obtained by feeding the instances of X_a 
-        and X_b into ``similarity_function``. It has shape [``batch_size``, factor count].
+            and X_b into ``similarity_function``. It has shape [``batch_size``, factor count].
+        
     """
 
     # Input validity

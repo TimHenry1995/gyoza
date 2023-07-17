@@ -132,8 +132,8 @@ class Mask(tf.keras.Model, ABC):
         # Outputs
         return x
        
-class HeaviSide(Mask):
-    """Applies a one-dimensional Heaviside function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
+class Heaviside(Mask):
+    """Applies a one-dimensional `Heaviside <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
     located at ``axes`` with ``shape`` many elements.
     
     :param axes: The axes (here only one axis) along which the Heaviside mask shall be applied.
@@ -154,10 +154,10 @@ class HeaviSide(Mask):
         mask = tf.constant(mask) 
 
         # Super
-        super(HeaviSide, self).__init__(axes=axes, mask=mask)
+        super(Heaviside, self).__init__(axes=axes, mask=mask)
 
 class SquareWaveSingleAxis(Mask):
-    """Applies a one-dimensional square wave of the shape 010101 to its input. Inputs are expected to have 1 spatial axis located at
+    """Applies a one-dimensional `square wave <https://en.wikipedia.org/wiki/Square_wave>`_ of the shape 010101 to its input. Inputs are expected to have 1 spatial axis located at
     ``axes`` with ``shape`` many elements.
     
     :param axes: The axes (here only one axis) along which the square wave shall be applied.
@@ -181,7 +181,7 @@ class SquareWaveSingleAxis(Mask):
         super(SquareWaveSingleAxis, self).__init__(axes=axes, mask=mask)
 
 class SquareWaveTwoAxes(Mask):
-    """Applies a two-dimensional square wave, also known as checkerboard pattern to its input. Inputs are expected to have 2 spatial
+    """Applies a two-dimensional square wave, also known as `checkerboard pattern <https://en.wikipedia.org/wiki/Check_(pattern)>`_ to its input. Inputs are expected to have 2 spatial
     axes located at ``axes`` with ``shape`` units along those axes.
         
     :param axes: The two axes along which the square-wave pattern shall be applied. Assumed to be two consecutive indices.

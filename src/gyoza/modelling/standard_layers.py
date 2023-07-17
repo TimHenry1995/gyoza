@@ -45,7 +45,7 @@ class ChannelWiseConvolutionTwoAxes(tf.keras.Model):
     :param layer_count: The number of layers.
     :type layer_count: int
     :param conv2D_kwargs: The kew-word arguments for the :class:`tensorflow.keras.layers.Conv2D` layers that are used here.
-        Important: The channel_axis is assumed to be the default, i.e. the last axis.
+        **Important**: The channel_axis is assumed to be the default, i.e. the last axis.
     """
 
     def __init__(self, layer_count:int = 3, conv2D_kwargs: Dict[str, Any] = {}):

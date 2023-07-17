@@ -718,6 +718,24 @@ class TestActivationNormalization(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
 
+    def test_invert_4D_input_along_axes_1_3(self):
+        """Tests whether the call and invert method of ActivatonNormalization can normalize and un-normalize 4D inputs along axes 1 and 3."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3,5], axes=[1,3])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
+
+        # Target
+        x_target = x
+
+        # Observe
+        y_hat = layer(x)
+        x_observed = layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((x_observed-x_target)**2).numpy(), second=0)
+
     def test_compute_jacobian_determinant_2_axes_axis_1(self):
         """Tests whether the activation normalization layer can compute the jacobian determinant on 2_axes inputs"""
                 

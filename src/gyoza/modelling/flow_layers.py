@@ -199,26 +199,24 @@ class Coupling(FlowLayer, ABC):
             x_1 & = w * x \\
             x_2 & = (1-w) * x \\
             y_1 & = x_1 \\
-            y_2 & = f(x_2, c(x_1)) \\
+            y_2 & = f(x_2, g(x_1)) \\
             y   & = y_1 + y_2,
         \end{eqnarray}
 
-    where :math:`w` is a binary ``mask`` that is equal to 1 for half of the coupling dimensions (see ``shape``, ``axes``) and 0 for 
-    the remaining dimensions. The function :math:`c(x)` is also called :py:meth:``compute_coupling_parameters`` (see below) and the 
-    function :math:`f` is the coupling law. As can be seen from the formula, the ``mask`` :math:`w` is used to select half of
-    the input :math:`x` in :math:`x_1` and the other half in :math:`x_2`. While :math:`y_1` is set equal to :math:`x_1`, the main
-    contribution of this layer is in the computation of :math:`y_2`. That is, :math:`y_2` is computed as the trivial combination :math:`f` 
-    (for example sum or product) of :math:`x_2` and coupling parameters :math:`c(x_1)`. The function :math:`c(x)` is a model of 
-    arbitrary complexity and it is thus possible to create non-linear mappings from :math:`x` to :math:`y`. The coupling law :math:`f` is
-    chosen by this layer to be trivially invertible and to have tractable Jacobian determinant which allows for the overall layer to 
-    elicit these two properties, too.
+    with ``mask`` :math:`w`, function :py:meth:`compute_coupling_parameters` :math:`g` and coupling law :math:`f`. As can be seen 
+    from the formula, the ``mask`` :math:`w` is used to select half of the input :math:`x` in :math:`x_1` and the other half in 
+    :math:`x_2`. While :math:`y_1` is set equal to :math:`x_1`, the main contribution of this layer is in the computation of 
+    :math:`y_2`. That is, the coupling law :math:`f` computes :math:`y_2` as a trivial combination, e.g. sum or product of :math:`x_2` 
+    and coupling parameters :math:`g(x_1)`. The function :math:`g` is a model of arbitrary complexity and it is thus possible to 
+    create non-linear mappings from :math:`x` to :math:`y`. The coupling law :math:`f` is chosen by this layer to be trivially 
+    invertible and to have tractable Jacobian determinant which ensures that the overall layer also has these two properties.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`.
     :type axes: List[int]
-    :param compute_coupling_parameters: The function that shall be used to compute parameters. See the placeholder member
-        :py:meth:`compute_coupling_parameters` for a detailed description of requirements.
+    :param compute_coupling_parameters: See the placeholder member :py:meth:`compute_coupling_parameters` for a detailed description 
+        of requirements.
     :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
     :param mask: The mask used to select one half of the data while discarding the other half.
     :type mask: :class:`gyoza.modelling.masks.Mask`
@@ -346,7 +344,7 @@ class Coupling(FlowLayer, ABC):
         return x
     
 class AdditiveCoupling(Coupling):
-    """This coupling layer implements an additive coupling of the form :math:`f(x_2, c(x_1) = x_2 + c(x_1)`. For details on the
+    """This coupling layer implements an additive coupling law of the form :math:`f(x_2, c(x_1) = x_2 + c(x_1)`. For details on the
     encapsulating theory refer to :class:`Coupling`.
     
     References:
@@ -385,7 +383,7 @@ class AdditiveCoupling(Coupling):
         return logarithmic_determinant
 
 class AffineCoupling(Coupling):
-    """This coupling layer implements an affine coupling of the form :math:`f(x_2, c(x_1) = e^s x_2 + t`, where :math:`s, t = c(x)`. 
+    """This coupling layer implements an affine coupling law of the form :math:`f(x_2, c(x_1) = e^s x_2 + t`, where :math:`s, t = c(x)`. 
     To prevent division by zero during decoupling, the exponent of :math:`s` is used as scale. For details on the encapsulating 
     theory refer to :class:`Coupling`. 
     

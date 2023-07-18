@@ -5,26 +5,34 @@ from typing import List
 import copy as cp
 
 class Mask(tf.keras.Model, ABC):
-    """This class can be used to curate elements of a tensor x. As suggested by the name semi, half of x is selected
-    while the other half is not."""
+    """This class can be used to curate half of the elements of a tensor :math:`x`. An input :math:`x` to this layer is expected
+    to have ``shape`` along ``axes``. It is then flattened along these ``axes`` and the ``mask`` is applied. Thereafter, :math:`x`
+    is unflattened and returned. 
+    
+    :param axes: The axes along which the selection shall be applied.
+    :type axes: :class:`List[int]`
+    :param shape: The shape that input :math:`x` to this layer has along ``axes``.
+    :type shape: :class:`List[int]`
+    :param mask: The mask to be applied to data passing through this layer. Its shape is expected to be a vector with 
+        product(``shape``) many entries. 
+    :type mask: :class:`tensorflow.Tensor`
+    """
 
-    def __init__(self, axes: List[int], mask: tf.Tensor):
-        """Constructor for this class. Subclasses can use it to store attributes.
-        
-        :param axes: The axes along which the selection shall be applied.
-        :type axes: :class:`List[int]`
-        :param mask: The mask to be applied to data passing through this layer. 
-        :type mask: :class:`tensorflow.Tensor`
-        """
+    def __init__(self, axes: List[int], shape: List[int], mask: tf.Tensor):
 
         # Super
         super(Mask, self).__init__()
 
-        self.__axes__ = axes
-        """(:class:List[int]`) - The axes along which the selection shall be applied."""
+        self.__axes__ = cp.copy(axes)
+        """(:class:`List[int]`) - The axes along which the selection shall be applied."""
 
-        self.__mask__ = tf.cast(mask, dtype=tf.keras.backend.floatx())
-        """(:class:`tensorflow.Tensor) - The mask to be applied to data passing through this layer."""
+        self.__shape__ = cp.copy(shape)
+        """(:class:`List[int]`) - The shape that input :math:`x` to this layer has along ``axes``."""
+
+        mask = tf.cast(mask, dtype=tf.keras.backend.floatx())
+        mask = tf.reshape(mask, [-1]) # Ensure it is flattened
+        self.__mask__ = mask
+        """(:class:`tensorflow.Tensor) - The mask to be applied to input :math:`x` to this layer."""
 
         self.__from_to__ = Mask.__compute_from_to__(mask=mask)
         """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
@@ -41,9 +49,6 @@ class Mask(tf.keras.Model, ABC):
         :return: from_to (tensorflow.Tensor) - The matrix that determines the mapping on flattened inputs. Note: to arrange elements
             of an input x one has to flatten x along the mask dimension first, then broadcast ``from_to`` to fit the new shape of x.
             After matrix multiplication of the two one needs to undo the flattening to get the arrange x."""
-
-        # Flatten mask
-        mask = tf.reshape(mask, [-1]) 
 
         # Determine indices
         from_indices = tf.concat([tf.where(mask), tf.where(1-mask)],0).numpy()[:,0].tolist()
@@ -67,21 +72,28 @@ class Mask(tf.keras.Model, ABC):
         :type is_positive: bool, optional
         :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
         """
-        
-        # Parity
+
+        # Set parity of mask
         if is_positive: mask = self.__mask__
         else: mask = 1 - self.__mask__
         
-        # Reshape mask to fit x
+        # Flatten x along self.__axes__ 
+        x_old_shape = cp.copy(x.shape)
+        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+
+        # Reshape mask
         axes = list(range(len(x.shape)))
-        for axis in self.__axes__: axes.remove(axis) 
-        mask = utt.expand_axes(x=mask, axes=axes)
+        axes.remove(self.__axes__[0])
+        mask = utt.expand_axes(x=mask, axes=axes) # Now has same shape as flat x along self.__axes__[0] and singleton everywhere else
+        
+        # Mask
+        x_masked = x * mask
 
-        # Apply mask to x
-        x_new = x * mask
-
+        # Unflatten to restore original shape
+        x_masked = tf.reshape(x_masked, shape=x_old_shape)
+        
         # Outputs
-        return x_new
+        return x_masked
 
     def arrange(self, x: tf.Tensor) -> tf.Tensor:
         """Arranges ``x`` into a vector such that all elements set to 0 by :py:meth:`mask` are enumerated first and all elements 
@@ -126,67 +138,73 @@ class Mask(tf.keras.Model, ABC):
         x = utt.swop_axes(x=x, from_axis=-1, to_axis=self.__axes__[0])
 
         # Unflatten along self.__axes__
-        old_shape = x.shape[:self.__axes__[0]] + self.__mask__.shape + x.shape[self.__axes__[0]+1:]
+        old_shape = x.shape[:self.__axes__[0]] + self.__shape__ + x.shape[self.__axes__[0]+1:]
         x = tf.reshape(x, shape=old_shape)
 
         # Outputs
         return x
        
 class Heaviside(Mask):
-    """Applies a one-dimensional `Heaviside <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function of the shape 000111 to its input. Inputs are expected to have 1 spatial axes 
-    located at ``axes`` with ``shape`` many elements.
+    """Applies a `Heaviside <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function to its input :math:`x`, e.g. 0001111. 
+    **IMPORTANT:** The Heaviside function is defined on a vector, yet by the requirement of :class:`Mask`, inputs :math:`x` to this 
+    layer are allowed to have more than one axis in ``axes``. As described in :class:`Mask`, an input :math:`x` is first flattened 
+    along ``axes`` and thus Heaviside can be applied. For background information see :class:`Mask`.
     
-    :param axes: The axes (here only one axis) along which the Heaviside mask shall be applied.
-    :type axes: :class:`List[int]`
-    :param shape: The number of units along ``axes``, e.g. [5] if an input x has shape [3,5,2] and ``axes`` == [1].
-    :type shape: :class:`List[int]`
+    :param shape: See base class :class:`Mask`.
+    :type shape: List[int]
+    :param axes: See base class :class:`Mask`.
+    :type axes: List[int]
     """
 
     def __init__(self, axes: int, shape: int):
         
-        # Input validity
-        assert len(axes) == 1, f"There must be one axis instead of {len(axes)} along which the Heaviside shall be applied."
-        assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
-
         # Set up mask
         mask = np.ones(shape=shape)
+        mask = np.reshape(mask, [-1]) # Flattening
         mask[:shape[0] // 2] = 0
         mask = tf.constant(mask) 
 
         # Super
-        super(Heaviside, self).__init__(axes=axes, mask=mask)
+        super(Heaviside, self).__init__(axes=axes, shape=shape, mask=mask)
 
-class SquareWaveSingleAxis(Mask):
-    """Applies a one-dimensional `square wave <https://en.wikipedia.org/wiki/Square_wave>`_ of the shape 010101 to its input. Inputs are expected to have 1 spatial axis located at
-    ``axes`` with ``shape`` many elements.
+class SquareWave(Mask):
+    """Applies a `square wave <https://en.wikipedia.org/wiki/Square_wave>`_, e.g. 010101 to its input :math:`x`. **IMPORTANT:** The 
+    square wave function is defined on a vector, yet by the requirement of :class:`Mask`, inputs :math:`x` to this layer are allowed 
+    to have more than one axis in ``axes``. As described in :class:`Mask`, an input :math:`x` is first flattened along ``axes`` and 
+    thus the square wave can be applied. For background information see :class:`Mask`.
     
-    :param axes: The axes (here only one axis) along which the square wave shall be applied.
-    :type axes: :class:`List[int]`
-    :param shape: The number of units along ``axes``, e.g. [5] if an input x has shape [3,5,2] and ``axes`` == [1].
-    :type shape: :class:`List[int]`
+    :param shape: See base class :class:`Mask`.
+    :type shape: List[int]
+    :param axes: See base class :class:`Mask`.
+    :type axes: List[int]
+    
     """
 
     def __init__(self, axes: int, shape: int):
         
-        # Input validity
-        assert len(axes) == 1, f"There must be one axis instead of {len(axes)} along which the square-wave shall be applied."
-        assert len(shape) == 1, f"The shape input is equal to {shape}, but it must have one axis."
-
         # Set up mask
         mask = np.ones(shape=shape)
+        mask = np.reshape(mask, [-1]) # Flatten
         mask[::2] = 0
         mask = tf.constant(mask) 
 
         # Super
-        super(SquareWaveSingleAxis, self).__init__(axes=axes, mask=mask)
+        super(SquareWave, self).__init__(axes=axes, shape=shape, mask=mask)
 
-class SquareWaveTwoAxes(Mask):
-    """Applies a two-dimensional square wave, also known as `checkerboard pattern <https://en.wikipedia.org/wiki/Check_(pattern)>`_ to its input. Inputs are expected to have 2 spatial
-    axes located at ``axes`` with ``shape`` units along those axes.
+class CheckerBoard(Mask):
+    """Applies a `checkerboard pattern <https://en.wikipedia.org/wiki/Check_(pattern)>`_ to its input. 
         
-    :param axes: The two axes along which the square-wave pattern shall be applied. Assumed to be two consecutive indices.
+    :param axes: The axes along which the selection shall be applied.
     :type axes: :class:`List[int]`
-    :param shape: The shape of the mask, e.g. 64*32 if an input x has shape [10,3,64,32] and ``axes`` == [2,3].
+    :param shape: The shape that input :math:`x` to this layer has along ``axes``.
+    :type shape: :class:`List[int]`
+    
+    
+    
+    :param axes: The **two** axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
+        [2,3] or [3,4].
+    :type axes: :class:`List[int]`
+    :param shape: The shape of the mask along ``axes``, e.g. 64*32 if an input :math:`x` has shape [10,3,64,32] and ``axes`` == [2,3].
     :type shape: :class:`List[int]`
     """
 
@@ -200,7 +218,8 @@ class SquareWaveTwoAxes(Mask):
         mask = np.ones(shape) 
         mask[1::2,1::2] = 0
         mask[::2,::2] = 0
+        mask = np.reshape(mask, [-1]) # Flatten
         mask = tf.constant(mask) 
         
         # Super
-        super(SquareWaveTwoAxes, self).__init__(axes=axes, mask=mask)
+        super(CheckerBoard, self).__init__(axes=axes, shape=shape, mask=mask)

@@ -89,7 +89,7 @@ class Permutation(FlowLayer):
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`.
-    :type shape: List[int]
+    :type axes: List[int]
     :param permutation: This layer flattens the input along ``axes`` and then uses ``permutation`` to reorder the dimensions. The 
         ``permutation`` is simply a new order of the indices between 0 and excluding dimension count, where dimension count is the
         product of dimensions in ``shape``.
@@ -160,7 +160,7 @@ class Shuffle(Permutation):
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`.
-    :type shape: List[int]
+    :type axes: List[int]
     """
 
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
@@ -170,13 +170,15 @@ class Shuffle(Permutation):
         permutation = list(range(dimension_count)); random.shuffle(permutation)
         super(Shuffle, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-class Swop(Permutation):
-    """Processes the input by first flattening along the given axes, then swopping the first and second half and fianlly unflattening.
-    
+class HeavisideSwop(Permutation):
+    """Processes the input by first flattening along the given axes, then swopping the first and second half and fianlly unflattening
+    it to original shape. The selection of first and second half is inspired by the `Heaviside 
+    <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function.
+
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`.
-    :type shape: List[int]
+    :type axes: List[int]
     """
 
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
@@ -184,10 +186,56 @@ class Swop(Permutation):
         # Super
         dimension_count = tf.reduce_prod(shape).numpy()
         permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
-        super(Swop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+        super(HeavisideSwop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-class HeaviSideSwop(Swop):
-    pass
+class SquareWaveSingleAxisSwop(Permutation):
+    """Processes the input by first flattening along the given axes, then swopping the dimensions at even indices with those at odd
+    indices and fianlly unflattening it to original shape. The selection of even and odd indices is inspired by the `square wave
+    <https://en.wikipedia.org/wiki/Square_wave>`_ function. For inputs with an odd number of dimensions, e.g. ``shape`` = [33] or 
+    ``shape`` = [95] the last dimension will not be changed.
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`. **IMPORTANT:** Must only contain a single axis.
+    :type axes: List[int]
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Super
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = list(range(dimension_count))
+        for i in range(1, dimension_count, 2):
+            tmp = permutation[i]
+            permutation[i] = permutation[i-1]
+            permutation[i-1] = tmp
+
+        super(SquareWaveSingleAxisSwop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+    
+class SquareWaveTwoAxesSwop(Permutation):
+    """Processes the input by first flattening along the given axes, then swopping the dimensions at even indices with those at odd
+    indices and fianlly unflattening it to original shape. The selection of even and odd indices is inspired by the `square wave
+    <https://en.wikipedia.org/wiki/Square_wave>`_ function. For inputs with an odd number of dimensions, e.g. ``shape`` = [33] or 
+    ``shape`` = [95] the last dimension will not be changed.
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`. **IMPORTANT:** Must only contain a single axis.
+    :type axes: List[int]
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Super
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = list(range(dimension_count))
+        for i in range(1, dimension_count, 2):
+            tmp = permutation[i]
+            permutation[i] = permutation[i-1]
+            permutation[i-1] = tmp
+
+        super(SquareWaveSingleAxisSwop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+    
 
 class Coupling(FlowLayer, ABC):
     r"""This layer couples the input :math:`x` with itself inside the method :py:meth:`call` by implementing the following formulae:

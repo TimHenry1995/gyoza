@@ -47,10 +47,10 @@ class FlowLayer(tf.keras.Model, ABC):
 
         # Attributes
         self.__shape__ = cp.copy(shape)
-        """The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
+        """(:class:`List[int]`) - The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
 
         self.__axes__ = cp.copy(axes)
-        """The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
+        """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
     @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:
@@ -84,15 +84,14 @@ class FlowLayer(tf.keras.Model, ABC):
         raise NotImplementedError()
 
 class Permutation(FlowLayer):
-    """This layer permutes the dimensions along the specified ``axes`` using the provided ``permutation``. 
+    """This layer flattens its input :math:`x` along ``axes``, then reorders the dimensions using ``permutation`` and reshapes 
+    :math:`x` to its original shape. 
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`.
     :type axes: List[int]
-    :param permutation: This layer flattens the input along ``axes`` and then uses ``permutation`` to reorder the dimensions. The 
-        ``permutation`` is simply a new order of the indices between 0 and excluding dimension count, where dimension count is the
-        product of dimensions in ``shape``.
+    :param permutation: A new order of the indices in the interval [0, product(``shape``)).
     :type permutation: List[int]
     """
 
@@ -108,8 +107,11 @@ class Permutation(FlowLayer):
         # Attributes
         permutation = tf.constant(permutation)
         self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
-        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
+        """(:class:`tensorflow.Variable`) - Stores the permutation vector for the forward operation."""
         
+        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
+        """(:class:`tensorflow.Variable`) - Stores the permutation vector for the inverse operation."""
+
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Initialize
@@ -154,8 +156,11 @@ class Permutation(FlowLayer):
         return logarithmic_determinant
 
 class Shuffle(Permutation):
-    """Shuffles input along the given axes. The permutation used for shuffling is randomly chosen once during initialization. 
-    Thereafter it is saved as a private attribute. Shuffling is thus deterministic.
+    """Shuffles input :math:`x`. The permutation used for shuffling is randomly chosen once during initialization. 
+    Thereafter it is saved as a private attribute. Shuffling is thus deterministic. **IMPORTANT:** The shuffle function is defined on 
+    a vector, yet by the requirement of :class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis 
+    in ``axes``. As described in :class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the shuffling can
+    be applied. For background information see :class:`Permutation`.
     
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -170,10 +175,12 @@ class Shuffle(Permutation):
         permutation = list(range(dimension_count)); random.shuffle(permutation)
         super(Shuffle, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-class HeavisideSwop(Permutation):
-    """Processes the input by first flattening along the given axes, then swopping the first and second half and fianlly unflattening
-    it to original shape. The selection of first and second half is inspired by the `Heaviside 
-    <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function.
+class Heaviside(Permutation):
+    """Swops the first and second half of input :math:`x` as inspired by the `Heaviside 
+    <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function.  **IMPORTANT:** The Heaviside function is defined on a vector, 
+    yet by the requirement of :class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis in ``axes``.
+    As described in :class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the swopping can be applied. 
+    For background information see :class:`Permutation`.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -186,17 +193,17 @@ class HeavisideSwop(Permutation):
         # Super
         dimension_count = tf.reduce_prod(shape).numpy()
         permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
-        super(HeavisideSwop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+        super(Heaviside, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-class SquareWaveSingleAxisSwop(Permutation):
-    """Processes the input by first flattening along the given axes, then swopping the dimensions at even indices with those at odd
-    indices and fianlly unflattening it to original shape. The selection of even and odd indices is inspired by the `square wave
+class SquareWave(Permutation):
+    """Swops the even and odd indices of inputs :math:`x` as inspired by the `square wave
     <https://en.wikipedia.org/wiki/Square_wave>`_ function. For inputs with an odd number of dimensions, e.g. ``shape`` = [33] or 
-    ``shape`` = [95] the last dimension will not be changed.
+    ``shape`` = [3,5] the last dimension (of the flattened input) will not be changed. For background information see 
+    :class:`Permutation`.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`. **IMPORTANT:** Must only contain a single axis.
+    :param axes: See base class :class:`FlowLayer`.
     :type axes: List[int]
     """
 
@@ -210,33 +217,52 @@ class SquareWaveSingleAxisSwop(Permutation):
             permutation[i] = permutation[i-1]
             permutation[i-1] = tmp
 
-        super(SquareWaveSingleAxisSwop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+        super(SquareWave, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-class SquareWaveTwoAxesSwop(Permutation):
-    """Processes the input by first flattening along the given axes, then swopping the dimensions at even indices with those at odd
-    indices and fianlly unflattening it to original shape. The selection of even and odd indices is inspired by the `square wave
-    <https://en.wikipedia.org/wiki/Square_wave>`_ function. For inputs with an odd number of dimensions, e.g. ``shape`` = [33] or 
-    ``shape`` = [95] the last dimension will not be changed.
+class CheckerBoard(Permutation):
+    """Swops the entries of inputs :math:`x` as inspired by the `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_
+    pattern. Observe that it is equivalent to :class:`SquareWave` when ``shape`` == :math:`[m,n]` and :math:`n` is odd. Yet, when 
+    :math:`n` is even, :class:`SquareWave` has columns of zeros alternating with columns of ones, whereas :class:`CheckerBoard` 
+    ensures a proper checker board pattern. For background information see :class:`Permutation`.
 
-    :param shape: See base class :class:`FlowLayer`.
-    :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`. **IMPORTANT:** Must only contain a single axis.
-    :type axes: List[int]
+    :param axes: The **two** axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
+        [2,3] or [3,4].
+    :type axes: :class:`List[int]`
+    :param shape: The shape of the mask along ``axes``, e.g. 64*32 if an input :math:`x` has shape [10,3,64,32] and ``axes`` == [2,3].
+    :type shape: :class:`List[int]`
     """
 
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
-        # Super
+        # Set up a checker board pattern 
+        checker_board_pattern = np.ones(shape) 
+        checker_board_pattern[1::2,1::2] = 0
+        checker_board_pattern[::2,::2] = 0
+        checker_board_pattern = np.reshape(checker_board_pattern, [-1]) # Flatten
+        one_indices = list(np.where(checker_board_pattern==1)[0]) # These indices will be swopped with those of zeros, [0] is due to singleton axis
+        zero_indices = list(np.where(checker_board_pattern==0)[0])
+
+        # Swop indices of ones and zeros in permutation
         dimension_count = tf.reduce_prod(shape).numpy()
-        permutation = list(range(dimension_count))
-        for i in range(1, dimension_count, 2):
-            tmp = permutation[i]
-            permutation[i] = permutation[i-1]
-            permutation[i-1] = tmp
+        permutation = [None] * dimension_count
+        for d in range(dimension_count):
+            # Swop index of current one for that of the next zero
+            if checker_board_pattern[d] == 1:
+                if len(zero_indices) > 0: 
+                    permutation[d] = zero_indices[0]
+                    del zero_indices[0]
+                else: permutation[d] = one_indices[0] # In case last dimension cannot be swopped
 
-        super(SquareWaveSingleAxisSwop, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+            # Swop index of a current zero for that of the next one
+            if checker_board_pattern[d] == 0:
+                if len(one_indices) > 0:
+                    permutation[d] = one_indices[0]
+                    del one_indices[0]
+                else: permutation[d] = zero_indices[0] # In case last dimension cannot be swopped
+
+        # Super
+        super(CheckerBoard, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-
 class Coupling(FlowLayer, ABC):
     r"""This layer couples the input :math:`x` with itself inside the method :py:meth:`call` by implementing the following formulae:
     

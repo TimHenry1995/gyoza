@@ -192,15 +192,10 @@ class SquareWave(Mask):
         super(SquareWave, self).__init__(axes=axes, shape=shape, mask=mask)
 
 class CheckerBoard(Mask):
-    """Applies a `checkerboard pattern <https://en.wikipedia.org/wiki/Check_(pattern)>`_ to its input. 
+    """Applies a `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_ pattern to its input. Observe that it is equivalent 
+    to :class:`SquareWave` when ``shape`` == :math:`[m,n]` and :math:`n` is odd. Yet, when :math:`n` is even, :class:`SquareWave` has
+    columns of zeros alternating with columns of ones, whereas :class:`CheckerBoard` ensures a proper checker board pattern.
         
-    :param axes: The axes along which the selection shall be applied.
-    :type axes: :class:`List[int]`
-    :param shape: The shape that input :math:`x` to this layer has along ``axes``.
-    :type shape: :class:`List[int]`
-    
-    
-    
     :param axes: The **two** axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
         [2,3] or [3,4].
     :type axes: :class:`List[int]`

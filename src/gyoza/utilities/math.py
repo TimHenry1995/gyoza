@@ -14,7 +14,6 @@ def polar_to_cartesian(rho, phi):
     y = rho * np.sin(phi)
     return x, y
 
-
 def archimedian_spiral(xs, alpha):
     phi = xs
 

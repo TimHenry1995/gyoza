@@ -21,7 +21,7 @@ class SupervisedFactorLoss():
 
         \begin{eqnarray}
             l(z^a,z^b | F) &= \frac{1}{2} \sum_{k=0}^{K} ||T(z^a)_k||^2 - log|T'(z^a)| \\
-                &+ \frac{1}{2} \sum_{k \neq F} ||T(z^b)_k||^2 - log(T'(z^b)) \\
+                &+ \frac{1}{2} \sum_{k \neq F} ||T(z^b)_k||^2 - log|T'(z^b)| \\
                 &+ \frac{1}{2} \frac{||T'(z^b)_F - \sigma_{ab} T(z^a)_F||^2}{1-\sigma_{ab}^2},
         \end{eqnarray}
         

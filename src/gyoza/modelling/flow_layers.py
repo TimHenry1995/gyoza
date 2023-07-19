@@ -194,51 +194,47 @@ class Heaviside(Permutation):
         dimension_count = tf.reduce_prod(shape).numpy()
         permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
         super(Heaviside, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
-    
-class SquareWave(Permutation):
-    """Swops the even and odd indices of inputs :math:`x` as inspired by the `square wave
-    <https://en.wikipedia.org/wiki/Square_wave>`_ function. For inputs with an odd number of dimensions, e.g. ``shape`` = [33] or 
-    ``shape`` = [3,5] the last dimension (of the flattened input) will not be changed. For background information see 
-    :class:`Permutation`.
-
-    :param shape: See base class :class:`FlowLayer`.
-    :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`.
-    :type axes: List[int]
-    """
-
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
-
-        # Super
-        dimension_count = tf.reduce_prod(shape).numpy()
-        permutation = list(range(dimension_count))
-        for i in range(1, dimension_count, 2):
-            tmp = permutation[i]
-            permutation[i] = permutation[i-1]
-            permutation[i-1] = tmp
-
-        super(SquareWave, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
-    
+ 
 class CheckerBoard(Permutation):
     """Swops the entries of inputs :math:`x` as inspired by the `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_
-    pattern. Observe that it is equivalent to :class:`SquareWave` when ``shape`` == :math:`[m,n]` and :math:`n` is odd. Yet, when 
-    :math:`n` is even, :class:`SquareWave` has columns of zeros alternating with columns of ones, whereas :class:`CheckerBoard` 
-    ensures a proper checker board pattern. For background information see :class:`Permutation`.
+    pattern. Swopping is done to preserve adjacency of cells within :math:`x`. **IMPORTANT:** The checkerboard pattern is usually
+    defined on a matrix, i.e. 2 axes. Yet, here it is possible to specify any number of axes.
 
-    :param axes: The **two** axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
-        [2,3] or [3,4].
+    :param axes: See base class :class:`FlowLayer`.
     :type axes: :class:`List[int]`
-    :param shape: The shape of the mask along ``axes``, e.g. 64*32 if an input :math:`x` has shape [10,3,64,32] and ``axes`` == [2,3].
+    :param shape: See base class :class:`FlowLayer`. 
     :type shape: :class:`List[int]`
     """
 
-    def is_end_of_axis(index, limit, direction):
+    @staticmethod
+    def is_end_of_axis(index: int, limit: int, direction: int) -> bool:
+        """Determines whether an ``index`` iterated in ``direction`` is at the end of a given axis.
+
+        :param index: The index to be checked.
+        :type index: int
+        :param limit: The number of elements along the axis. An index is considered to be at the end if it is equal to ``limit``-1 
+            and ``direction`` == 1. 
+        :type limit: int
+        :param direction: The direction in which the index is iterated. A value of 1 indicates incremental, -1 indicates decremental.
+        :type direction: int
+        :return: An indicator for whether the endpoint has been reached.
+        :rtype: bool
+        """
         if direction == 1: # Incremental
             return index == limit -1
-        else:
+        else: # Decremental
             return index == 0
 
-    def generate_rope_indices(shape):
+    @staticmethod
+    def generate_rope_indices(shape: List[int]) -> List[int]:
+        """Generates indices to traverse a tensor of ``shape``. The traversal follows a rope fitted along the axes by prioritizing
+        later axes before earlier axes.
+
+        :param shape: The shape of the tensor to be traversed.
+        :type shape: :class:`List[int]`
+        :yield: current_indices (:class:`List[int]`) - The indices pointing to the current cell in the tensor. It provides one index
+            along each axis of ``shape``.
+        """
         dimension_count = np.product(shape)
         current_indices = [0] * len(shape)
         yield current_indices

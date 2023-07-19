@@ -158,11 +158,10 @@ class TestHeaviside(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
-
-class TestSquareWave(unittest.TestCase):
+class TestCheckerBoard(unittest.TestCase):
+    
     def test_mask_one_axis_even_length(self):
-
-        """Tests whether the mask method of SquareWave works on a 1 axis input of even length."""
+        """Tests whether the mask method of CheckerBoard works on a 1 axis input of even length."""
 
         # Initialize
         x = tf.range(10, dtype=tf.keras.backend.floatx())
@@ -173,7 +172,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave(axes=[0], shape=[10])
+        instance = mms.CheckerBoard(axes=[0], shape=[10])
         x_observed = instance.call(x=x)
 
         # Evaluate
@@ -181,7 +180,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_two_axes_axis_1(self):
-        """Tests whether the mask method of SquareWave works on a two axes input along axis 1."""
+        """Tests whether the mask method of CheckerBoard works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -192,7 +191,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave(axes=[1], shape=[5])
+        instance = mms.CheckerBoard(axes=[1], shape=[5])
         x_observed = instance.call(x=x)
 
         # Evaluate
@@ -200,7 +199,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_two_axes_axis_0(self):
-        """Tests whether the mask method of SquareWave works on a two axes input along axis 0."""
+        """Tests whether the mask method of CheckerBoard works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
@@ -211,7 +210,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave(axes=[0], shape=[3])
+        instance = mms.CheckerBoard(axes=[0], shape=[3])
         x_observed = instance.call(x=x)
 
         # Evaluate
@@ -219,7 +218,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_mask_two_axes_axis_1_negative(self):
-        """Tests whether the mask method of SquareWave works on a two axes input along axis 1
+        """Tests whether the mask method of CheckerBoard works on a two axes input along axis 1
         with a negative mask."""
 
         # Initialize
@@ -231,7 +230,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        instance = mms.SquareWave(axes=[1], shape=[5])
+        instance = mms.CheckerBoard(axes=[1], shape=[5])
         x_observed = instance.call(x=x, is_positive=False)
 
         # Evaluate
@@ -239,7 +238,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_arrange_one_axis_odd(self):
-        """Tests whether the arrange method of SquareWave works on a 1 axis input of odd length."""
+        """Tests whether the arrange method of CheckerBoard works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.constant([5,2,6,1,3], dtype=tf.keras.backend.floatx())
@@ -248,7 +247,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant([2,1,5,6,3], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave(axes=[0], shape=[5])
+        instance = mms.CheckerBoard(axes=[0], shape=[5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
@@ -256,7 +255,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_arrange_two_axes_axis_0(self):
-        """Tests whether the arrange method of SquareWave works on a two axes input along axis 0."""
+        """Tests whether the arrange method of CheckerBoard works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
@@ -265,7 +264,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant([[8,6,2,4,0],[5,2,6,1,3]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave(axes=[0], shape=[2])
+        instance = mms.CheckerBoard(axes=[0], shape=[2])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
@@ -273,7 +272,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_arrange_two_axes_axis_1(self):
-        """Tests whether the arrange method of SquareWave works on a two axes input along axis 1."""
+        """Tests whether the arrange method of CheckerBoard works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
@@ -282,7 +281,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant([[2,1,5,6,3],[6,4,8,2,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave(axes=[1], shape=[5])
+        instance = mms.CheckerBoard(axes=[1], shape=[5])
         x_observed = instance.arrange(x=x)
 
         # Evaluate
@@ -290,7 +289,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_re_arrange_one_axis_odd(self):
-        """Tests whether the re_arrange method of SquareWave works on a 1 axis input of odd length."""
+        """Tests whether the re_arrange method of CheckerBoard works on a 1 axis input of odd length."""
 
         # Initialize
         x = tf.constant([2,1,5,6,3], dtype=tf.keras.backend.floatx())
@@ -299,7 +298,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant([5,2,6,1,3], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave(axes=[0], shape=[5])
+        instance = mms.CheckerBoard(axes=[0], shape=[5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
@@ -307,7 +306,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_re_arrange_two_axes_axis_0(self):
-        """Tests whether the re_arrange method of SquareWave works on a two axes input along axis 0."""
+        """Tests whether the re_arrange method of CheckerBoard works on a two axes input along axis 0."""
 
         # Initialize
         x = tf.constant([[8,6,2,4,0],[5,2,6,1,3]], dtype=tf.keras.backend.floatx())
@@ -316,7 +315,7 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave(axes=[0], shape=[2])
+        instance = mms.CheckerBoard(axes=[0], shape=[2])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
@@ -324,7 +323,7 @@ class TestSquareWave(unittest.TestCase):
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
     def test_re_arrange_two_axes_axis_1(self):
-        """Tests whether the re_arrange method of SquareWave works on a two axes input along axis 1."""
+        """Tests whether the re_arrange method of CheckerBoard works on a two axes input along axis 1."""
 
         # Initialize
         x = tf.constant([[2,1,5,6,3],[6,4,8,2,0]], dtype=tf.keras.backend.floatx())
@@ -333,14 +332,12 @@ class TestSquareWave(unittest.TestCase):
         x_target = tf.constant([[5,2,6,1,3],[8,6,2,4,0]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        instance = mms.SquareWave(axes=[1], shape=[5])
+        instance = mms.CheckerBoard(axes=[1], shape=[5])
         x_observed = instance.re_arrange(x_new=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
-
-class TestCheckerBoard(unittest.TestCase):
 
     def test_mask_two_axes_axes_0_1(self):
         """Tests whether the mask method of CheckerBoard works on a two axes input along axes 0 and 1."""
@@ -555,4 +552,4 @@ class TestCheckerBoard(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestCheckerBoard.test_arrange_four_axes_axis_1_2(None)
+    TestCheckerBoard.test_mask_two_axes_axes_0_1(None)

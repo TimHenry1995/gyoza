@@ -167,30 +167,6 @@ class Heaviside(Mask):
         # Super
         super(Heaviside, self).__init__(axes=axes, shape=shape, mask=mask)
 
-class SquareWave(Mask):
-    """Applies a `square wave <https://en.wikipedia.org/wiki/Square_wave>`_, e.g. 010101 to its input :math:`x`. **IMPORTANT:** The 
-    square wave function is defined on a vector, yet by the requirement of :class:`Mask`, inputs :math:`x` to this layer are allowed 
-    to have more than one axis in ``axes``. As described in :class:`Mask`, an input :math:`x` is first flattened along ``axes`` and 
-    thus the square wave can be applied. For background information see :class:`Mask`.
-    
-    :param shape: See base class :class:`Mask`.
-    :type shape: List[int]
-    :param axes: See base class :class:`Mask`.
-    :type axes: List[int]
-    
-    """
-
-    def __init__(self, axes: int, shape: int):
-        
-        # Set up mask
-        mask = np.ones(shape=shape)
-        mask = np.reshape(mask, [-1]) # Flatten
-        mask[::2] = 0
-        mask = tf.constant(mask) 
-
-        # Super
-        super(SquareWave, self).__init__(axes=axes, shape=shape, mask=mask)
-
 class CheckerBoard(Mask):
     """Applies a `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_ pattern to its input. Observe that it is equivalent 
     to :class:`SquareWave` when ``shape`` == :math:`[m,n]` and :math:`n` is odd. Yet, when :math:`n` is even, :class:`SquareWave` has
@@ -205,15 +181,22 @@ class CheckerBoard(Mask):
 
     def __init__(self, axes: List[int], shape: List[int]) -> None:
         
-        # Input validity
-        assert len(axes) == 2, f"There must be two axes instead of {len(axes)} along which the square-wave shall be applied."
-        assert axes[1] == axes[0] + 1, f"The axes {axes} have to be two consecutive indices."
-        assert len(shape) == 2, f"The shape input is equal to {shape}, but it must have two axes."
-
         # Set up mask
-        mask = np.ones(shape) 
-        mask[1::2,1::2] = 0
-        mask[::2,::2] = 0
+        mask = np.zeros(shape) 
+        dimension_count = np.product(shape)
+        current_indices = [0] * len(shape)
+        mask[tuple(current_indices)] = np.sum(current_indices) % 2
+        for d in range(dimension_count):
+            # Increment index counter (with carry on to next axes if needed)
+            for s in range(len(shape)-1,-1,-1): 
+                if current_indices[s] == shape[s] - 1:
+                    current_indices[s] = 0
+                else:
+                    current_indices[s] += 1
+                    break
+
+            mask[tuple(current_indices)] = np.sum(current_indices) % 2
+
         mask = np.reshape(mask, [-1]) # Flatten
         mask = tf.constant(mask) 
         

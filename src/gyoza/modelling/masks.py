@@ -204,6 +204,7 @@ class CheckerBoard(Mask):
     """
 
     def __init__(self, axes: List[int], shape: List[int]) -> None:
+        
         # Input validity
         assert len(axes) == 2, f"There must be two axes instead of {len(axes)} along which the square-wave shall be applied."
         assert axes[1] == axes[0] + 1, f"The axes {axes} have to be two consecutive indices."

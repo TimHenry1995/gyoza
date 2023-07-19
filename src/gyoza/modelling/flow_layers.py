@@ -234,31 +234,32 @@ class CheckerBoard(Permutation):
 
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
-        # Set up a checker board pattern 
-        checker_board_pattern = np.ones(shape) 
-        checker_board_pattern[1::2,1::2] = 0
-        checker_board_pattern[::2,::2] = 0
-        checker_board_pattern = np.reshape(checker_board_pattern, [-1]) # Flatten
-        one_indices = list(np.where(checker_board_pattern==1)[0]) # These indices will be swopped with those of zeros, [0] is due to singleton axis
-        zero_indices = list(np.where(checker_board_pattern==0)[0])
+        # Input validity
+        assert len(axes) == 2, f"There must be two axes instead of {len(axes)} along which the square-wave shall be applied."
+        assert axes[1] == axes[0] + 1, f"The axes {axes} have to be two consecutive indices."
+        assert len(shape) == 2, f"The shape input is equal to {shape}, but it must have two axes."
 
-        # Swop indices of ones and zeros in permutation
-        dimension_count = tf.reduce_prod(shape).numpy()
-        permutation = [None] * dimension_count
-        for d in range(dimension_count):
-            # Swop index of current one for that of the next zero
-            if checker_board_pattern[d] == 1:
-                if len(zero_indices) > 0: 
-                    permutation[d] = zero_indices[0]
-                    del zero_indices[0]
-                else: permutation[d] = one_indices[0] # In case last dimension cannot be swopped
+        # Set up permutation vector
+        dimension_count = np.product(shape)
+        permutation = np.reshape(np.arange(dimension_count), shape)
+        
+        # Swop adjacent elements for columns up until and including last odd index
+        for r in range(shape[0]): # iterate rows
+            for c in range(0, 2*(shape[1]//2), 2): # iterate columns
+                # Swop
+                tmp = permutation[r,c]
+                permutation[r,c] = permutation[r,c+1]
+                permutation[r,c+1] = tmp
 
-            # Swop index of a current zero for that of the next one
-            if checker_board_pattern[d] == 0:
-                if len(one_indices) > 0:
-                    permutation[d] = one_indices[0]
-                    del one_indices[0]
-                else: permutation[d] = zero_indices[0] # In case last dimension cannot be swopped
+        # Swop rows of last column if it has even index
+        if shape[1] % 2 == 1:
+            for r in range(0, 2*(shape[0]//2), 2): # iterate rows
+                tmp = permutation[r,-1]
+                permutation[r,-1] = permutation[r+1,-1]
+                permutation[r+1,-1] = tmp
+
+        # Flatten permutation
+        permutation = list(np.reshape(permutation, [-1]))
 
         # Super
         super(CheckerBoard, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
@@ -308,9 +309,9 @@ class Coupling(FlowLayer, ABC):
 
         # Input validity
         shape_message = f"The shape ({shape}) provided to the coupling layer and that provided to the mask ({mask.__mask__.shape}) are expected to be the same."
-        assert len(shape) == len(mask.__mask__.shape), shape_message
+        assert len(shape) == len(mask.__shape__), shape_message
         for i in range(len(shape)):
-            assert shape[i] == mask.__mask__.shape[i], shape_message
+            assert shape[i] == mask.__shape__[i], shape_message
 
         axes_message = f"The axes ({axes}) provided to the coupling layer and that provided to the mask ({mask.__axes__}) are expected to be the same."
         assert len(axes) == len(mask.__axes__), axes_message

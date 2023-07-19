@@ -14,7 +14,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.models.Sequential([tf.keras.layers.Dense(units=5, activation='tanh')])
-        mask = mms.HeaviSide(axes=[2], shape=[5]) # Heaviside mask
+        mask = mms.Heaviside(axes=[2], shape=[5]) # Heaviside mask
         mfl.AdditiveCoupling(axes=[2], shape=[5], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def test_init_2_axes(self):
@@ -31,7 +31,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
-        mask = mms.HeaviSide(axes=[1],shape=[4])
+        mask = mms.Heaviside(axes=[1],shape=[4])
         layer = mfl.AdditiveCoupling(shape=[4], axes=[1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,4,3])
 
@@ -74,7 +74,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
-        mask = mms.HeaviSide(axes=[1], shape=[4])
+        mask = mms.Heaviside(axes=[1], shape=[4])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,4,3])
         y_hat = x.numpy()
@@ -123,7 +123,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.HeaviSide(axes=[1], shape=[7])
+        mask = mms.Heaviside(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -446,6 +446,106 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
+class TestSquareWave(unittest.TestCase):
+
+    def test_call_2_axes_input_1_even_axis_permutation(self):
+        """Tests whether the call method correctly swops indices on a 2 axis input with even dimension count along the permutation axis."""
+        
+        # Initialize
+        permutation_layer = mfl.SquareWave(shape=[4], axes=[1])
+        x = tf.constant([[4,6,3,2], [1,3,7,8]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[6,4,2,3], [3,1,8,7]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_2_axes_input_1_odd_axis_permutation(self):
+        """Tests whether the call method correctly swops indices on a 2 axis input with odd dimension count along the permutation axis."""
+        
+        # Initialize
+        permutation_layer = mfl.SquareWave(shape=[5], axes=[1])
+        x = tf.constant([[4,6,3,2,1], [1,3,7,8,4]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[6,4,2,3,1], [3,1,8,7,4]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+
+    def test_call_3_axes_input_2_even_even_axes_permutation(self):
+        """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the two permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.SquareWave(shape=[2,4], axes=[1,2])
+        x = tf.constant([[[4,6,3,2], [1,3,7,8]],
+                         [[8,3,5,2], [9,7,8,2]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3], [3,1,8,7]],
+                         [[3,8,2,5], [7,9,2,8]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_2_even_odd_axes_permutation(self):
+        """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the first and odd count along the second permutation axis."""
+        
+        # Initialize
+        permutation_layer = mfl.SquareWave(shape=[2,5], axes=[1,2])
+        x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5]],
+                         [[8,3,5,2,4], [9,7,8,2,1]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,1], [9,7,3,5,8]],
+                         [[3,8,2,5,9], [4,8,7,1,2]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_2_odd_odd_axes_permutation(self):
+        """Tests whether the call method correctly swops indices on a 3 axis input with odd dimension count along the two permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.SquareWave(shape=[2,5], axes=[1,2])
+        x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5]],
+                         [[8,3,5,2,4], [9,7,8,2,1]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,1], [9,7,3,5,8]],
+                         [[3,8,2,5,9], [4,8,7,1,2]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_and_inverse_4_axes_input_even_odd(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 4 axes input along 2 axes even and odd dimension count."""
+        
+        # Initialize
+        batch_size = 2; width = 4; height = 7; channel_count = 3
+        permutation_layer = mfl.SquareWave(shape=[width, height], axes=[1,2])
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe
+        y_hat = permutation_layer(x=x)
+        x_hat = permutation_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
 class TestCheckerBoard(unittest.TestCase):
 
     def test_call_3_axes_even_even(self):
@@ -472,8 +572,8 @@ class TestCheckerBoard(unittest.TestCase):
         permutation_layer = mfl.CheckerBoard(shape=[2,5], axes=[1,2])
         x = tf.constant([[[4,6,3,2,5], [1,3,7,8,2]],
                          [[8,3,7,2,1], [9,7,8,2,4]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3,1], [5,7,3,2,8]],
-                         [[3,8,2,7,9], [1,8,7,4,2]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,2], [3,1,8,7,5]],
+                         [[3,8,2,7,4], [7,9,2,8,1]]], dtype=tf.keras.backend.floatx())
 
         # Observe
         y_hat = permutation_layer(x=x)
@@ -489,8 +589,8 @@ class TestCheckerBoard(unittest.TestCase):
         permutation_layer = mfl.CheckerBoard(shape=[3,5], axes=[1,2])
         x = tf.constant([[[4,6,3,2,5], [1,3,7,8,2], [6,4,8,1,2]],
                          [[8,3,7,2,1], [9,7,8,2,4], [8,3,4,2,7]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3,1], [5,7,3,2,8], [4,6,1,8,2]],
-                         [[3,8,2,7,9], [1,8,7,4,2], [3,8,2,4,7]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,2], [3,1,8,7,5], [4,6,1,8,2]],
+                         [[3,8,2,7,4], [7,9,2,8,1], [3,8,2,4,7]]], dtype=tf.keras.backend.floatx())
 
         # Observe
         y_hat = permutation_layer(x=x)
@@ -522,6 +622,22 @@ class TestCheckerBoard(unittest.TestCase):
         batch_size = 2; width = 4; height = 7
         permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
         x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
+        
+        # Observe
+        y_hat = permutation_layer(x=x)
+        x_hat = permutation_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+    def test_call_and_inverse_4_axes_input_even_odd(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 4 axes input along 2 axes even and odd dimension count."""
+        
+        # Initialize
+        batch_size = 2; width = 4; height = 7; channel_count = 3
+        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
         # Observe
         y_hat = permutation_layer(x=x)
@@ -959,4 +1075,4 @@ class TestActivationNormalization(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestCheckerBoard().test_call_3_axes_even_odd()
+    TestSquareWave().test_call_2_axes_input_1_odd_axis_permutation()

@@ -145,16 +145,16 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_call_triangular_jacobian_2_axes_input_square_wave_1_axis_mask(self):
+    def test_call_triangular_jacobian_2_axes_input_checker_board_1_axis_mask(self):
         """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 2-axes inputs 
-        with a square wave 1 axis mask."""
+        with a checker board 1 axis mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.SquareWave(axes=[1], shape=[7])
+        mask = mms.CheckerBoard(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -176,9 +176,9 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_call_triangular_jacobian_3_axes_input_square_wave_2_axes_mask(self):
+    def test_call_triangular_jacobian_3_axes_input_checker_board_2_axes_mask(self):
         """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 3-axes inputs 
-        with square wave 2_axes mask."""
+        with checker board 2_axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
@@ -205,9 +205,9 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_call_triangular_jacobian_4_axes_input_square_wave_2_axes_mask(self):
+    def test_call_triangular_jacobian_4_axes_input_checker_board_2_axes_mask(self):
         """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 4-axes inputs 
-        with square wave 2_axes mask."""
+        with checker board 2_axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
@@ -235,16 +235,16 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_compute_jacobian_determinant_2_axes_input_square_wave_1_axis_mask(self):
+    def test_compute_jacobian_determinant_2_axes_input_chcker_board_1_axis_mask(self):
         """Tests whether the compute_jacobian_determinant method of AdditiveCoupling correctly computes the determinant on 
-        2-axes inputs with a square wave 1 axis mask."""
+        2-axes inputs with a checker board 1 axis mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.SquareWave(axes=[1], shape=[7])
+        mask = mms.CheckerBoard(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -262,9 +262,9 @@ class TestAdditiveCoupling(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertEqual(first=x_observed[j], second=np.log(np.linalg.det(J[j].numpy())))  
 
-    def test_compute_jacobian_determinant_3_axes_input_square_wave_2_axes_mask(self):
+    def test_compute_jacobian_determinant_3_axes_input_checker_board_2_axes_mask(self):
         """Tests whether the compute_jacobian_determinant method of AdditiveCoupling correctly computes the determinant on 
-        3-axes inputs with a square wave 2 axes mask."""
+        3-axes inputs with a checker board 2 axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
@@ -292,9 +292,9 @@ class TestAdditiveCoupling(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertEqual(first=x_observed[j].numpy(), second=np.log(np.linalg.det(J[j].numpy())))  
 
-    def test_compute_jacobian_determinant_4_axes_input_square_wave_2_axes_mask(self):
+    def test_compute_jacobian_determinant_4_axes_input_checker_board_2_axes_mask(self):
         """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 4-axes inputs 
-        with square wave 2 axes mask."""
+        with checker board 2 axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
@@ -323,7 +323,6 @@ class TestAdditiveCoupling(unittest.TestCase):
 
 
     def test_load_and_save(self):
-
         """Tests whether the model provides the same shuffling after persistent storage."""
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')

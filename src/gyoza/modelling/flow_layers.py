@@ -117,7 +117,7 @@ class Permutation(FlowLayer):
         # Initialize
         old_shape = cp.copy(x.shape)
 
-        # Flatten along self.__axes__ to fit permutation matrix
+        # Flatten along self.__axes__ to fit permutation vector
         x = utt.flatten_along_axes(x=x, axes=self.__axes__)
 
         # Shuffle
@@ -232,34 +232,51 @@ class CheckerBoard(Permutation):
     :type shape: :class:`List[int]`
     """
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def is_end_of_axis(index, limit, direction):
+        if direction == 1: # Incremental
+            return index == limit -1
+        else:
+            return index == 0
 
-        # Input validity
-        assert len(axes) == 2, f"There must be two axes instead of {len(axes)} along which the square-wave shall be applied."
-        assert axes[1] == axes[0] + 1, f"The axes {axes} have to be two consecutive indices."
-        assert len(shape) == 2, f"The shape input is equal to {shape}, but it must have two axes."
+    def generate_rope_indices(shape):
+        dimension_count = np.product(shape)
+        current_indices = [0] * len(shape)
+        yield current_indices
+        directions = [1] * len(shape)
+        for d in range(dimension_count):
+            # Increment index counter (with carry on to next axes if needed)
+            for s in range(len(shape)-1,-1,-1): 
+                if CheckerBoard.is_end_of_axis(index=current_indices[s], limit=shape[s], direction=directions[s]):
+                    directions[s] = -directions[s]
+                else:
+                    current_indices[s] += directions[s]
+                    break
+
+            yield current_indices
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
         # Set up permutation vector
         dimension_count = np.product(shape)
-        permutation = np.reshape(np.arange(dimension_count), shape)
+        tensor = np.reshape(np.arange(dimension_count), shape)
+        rope_values = [None] * dimension_count
         
-        # Swop adjacent elements for columns up until and including last odd index
-        for r in range(shape[0]): # iterate rows
-            for c in range(0, 2*(shape[1]//2), 2): # iterate columns
-                # Swop
-                tmp = permutation[r,c]
-                permutation[r,c] = permutation[r,c+1]
-                permutation[r,c+1] = tmp
+        # Unravel tensor
+        rope_index_generator = CheckerBoard.generate_rope_indices(shape=shape)
+        for d in range(dimension_count): rope_values[d] = tensor[tuple(next(rope_index_generator))]
 
-        # Swop rows of last column if it has even index
-        if shape[1] % 2 == 1:
-            for r in range(0, 2*(shape[0]//2), 2): # iterate rows
-                tmp = permutation[r,-1]
-                permutation[r,-1] = permutation[r+1,-1]
-                permutation[r+1,-1] = tmp
+        # Swop every two adjacent values
+        for d in range(0, 2*(dimension_count//2), 2):
+            tmp = rope_values[d]
+            rope_values[d] = rope_values[d+1]
+            rope_values[d+1] = tmp
 
-        # Flatten permutation
-        permutation = list(np.reshape(permutation, [-1]))
+        # Ravel tensor
+        rope_index_generator = CheckerBoard.generate_rope_indices(shape=shape)
+        for d in range(dimension_count): tensor[tuple(next(rope_index_generator))] = rope_values[d]
+
+        # Flattened tensor now gives permutation
+        permutation = list(np.reshape(tensor, [-1]))
 
         # Super
         super(CheckerBoard, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)

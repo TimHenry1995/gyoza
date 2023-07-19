@@ -446,13 +446,13 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
-class TestSquareWave(unittest.TestCase):
+class TestCheckerBoard(unittest.TestCase):
 
     def test_call_2_axes_input_1_even_axis_permutation(self):
         """Tests whether the call method correctly swops indices on a 2 axis input with even dimension count along the permutation axis."""
         
         # Initialize
-        permutation_layer = mfl.SquareWave(shape=[4], axes=[1])
+        permutation_layer = mfl.CheckerBoard(shape=[4], axes=[1])
         x = tf.constant([[4,6,3,2], [1,3,7,8]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[6,4,2,3], [3,1,8,7]], dtype=tf.keras.backend.floatx())
 
@@ -467,7 +467,7 @@ class TestSquareWave(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 2 axis input with odd dimension count along the permutation axis."""
         
         # Initialize
-        permutation_layer = mfl.SquareWave(shape=[5], axes=[1])
+        permutation_layer = mfl.CheckerBoard(shape=[5], axes=[1])
         x = tf.constant([[4,6,3,2,1], [1,3,7,8,4]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[6,4,2,3,1], [3,1,8,7,4]], dtype=tf.keras.backend.floatx())
 
@@ -478,12 +478,11 @@ class TestSquareWave(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
         self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
 
-
     def test_call_3_axes_input_2_even_even_axes_permutation(self):
         """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the two permutation axes."""
         
         # Initialize
-        permutation_layer = mfl.SquareWave(shape=[2,4], axes=[1,2])
+        permutation_layer = mfl.CheckerBoard(shape=[2,4], axes=[1,2])
         x = tf.constant([[[4,6,3,2], [1,3,7,8]],
                          [[8,3,5,2], [9,7,8,2]]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[[6,4,2,3], [3,1,8,7]],
@@ -500,11 +499,11 @@ class TestSquareWave(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the first and odd count along the second permutation axis."""
         
         # Initialize
-        permutation_layer = mfl.SquareWave(shape=[2,5], axes=[1,2])
+        permutation_layer = mfl.CheckerBoard(shape=[2,5], axes=[1,2])
         x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5]],
                          [[8,3,5,2,4], [9,7,8,2,1]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3,1], [9,7,3,5,8]],
-                         [[3,8,2,5,9], [4,8,7,1,2]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,5], [3,1,8,7,9]],
+                         [[3,8,2,5,1], [7,9,2,8,4]]], dtype=tf.keras.backend.floatx())
 
         # Observe
         y_hat = permutation_layer(x=x)
@@ -517,80 +516,104 @@ class TestSquareWave(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 3 axis input with odd dimension count along the two permutation axes."""
         
         # Initialize
-        permutation_layer = mfl.SquareWave(shape=[2,5], axes=[1,2])
-        x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5]],
-                         [[8,3,5,2,4], [9,7,8,2,1]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3,1], [9,7,3,5,8]],
-                         [[3,8,2,5,9], [4,8,7,1,2]]], dtype=tf.keras.backend.floatx())
-
-        # Observe
-        y_hat = permutation_layer(x=x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
-        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
-
-    def test_call_and_inverse_4_axes_input_even_odd(self):
-        """Tests whether the inverse method is indeed providing the inverse of the call on a 4 axes input along 2 axes even and odd dimension count."""
-        
-        # Initialize
-        batch_size = 2; width = 4; height = 7; channel_count = 3
-        permutation_layer = mfl.SquareWave(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
-        
-        # Observe
-        y_hat = permutation_layer(x=x)
-        x_hat = permutation_layer.invert(y_hat=y_hat)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
-        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
-
-class TestCheckerBoard(unittest.TestCase):
-
-    def test_call_3_axes_even_even(self):
-        """Tests whether the call method is correctly swops indices on a 3 axis input with even dimension count along the two permutation axes."""
-        
-        # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,4], axes=[1,2])
-        x = tf.constant([[[4,6,3,2], [1,3,7,8]],
-                         [[8,3,5,2], [9,7,8,2]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3], [3,1,8,7]],
-                         [[3,8,2,5], [7,9,2,8]]], dtype=tf.keras.backend.floatx())
-
-        # Observe
-        y_hat = permutation_layer(x=x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
-        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
-
-    def test_call_3_axes_even_odd(self):
-        """Tests whether the call method is correctly swops indices on a 3 axis input with even dimension count along the first permutation axis and odd count along the second."""
-        
-        # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,5], axes=[1,2])
-        x = tf.constant([[[4,6,3,2,5], [1,3,7,8,2]],
-                         [[8,3,7,2,1], [9,7,8,2,4]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3,2], [3,1,8,7,5]],
-                         [[3,8,2,7,4], [7,9,2,8,1]]], dtype=tf.keras.backend.floatx())
-
-        # Observe
-        y_hat = permutation_layer(x=x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
-        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
-
-    def test_call_3_axes_odd_odd(self):
-        """Tests whether the call method is correctly swops indices on a 3 axis input with odd dimension count along both permutation axes."""
-        
-        # Initialize
         permutation_layer = mfl.CheckerBoard(shape=[3,5], axes=[1,2])
-        x = tf.constant([[[4,6,3,2,5], [1,3,7,8,2], [6,4,8,1,2]],
-                         [[8,3,7,2,1], [9,7,8,2,4], [8,3,4,2,7]]], dtype=tf.keras.backend.floatx())
-        y = tf.constant([[[6,4,2,3,2], [3,1,8,7,5], [4,6,1,8,2]],
-                         [[3,8,2,7,4], [7,9,2,8,1], [3,8,2,4,7]]], dtype=tf.keras.backend.floatx())
+        x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5], [5,3,7,9,0]],
+                         [[8,3,5,2,4], [9,7,8,2,1], [1,3,6,0,9]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,5], [3,1,8,7,9], [3,5,9,7,0]],
+                         [[3,8,2,5,1], [7,9,2,8,4], [3,1,0,6,9]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_even_even_even_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with even dimension count along the three permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,2,4], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2], [1,3,7,8]],
+                          [[8,3,5,2], [9,7,8,2]]],
+                         [[[7,3,4,2], [5,8,9,6]],
+                          [[0,2,4,6], [0,1,3,2]]], 
+                          ], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3], [3,1,8,7]],
+                          [[3,8,2,5], [7,9,2,8]]],
+                         [[[3,7,2,4], [8,5,6,9]],
+                          [[2,0,6,4], [1,0,2,3]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_even_odd_even_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with even dimension count along the first and third permutation axes and odd count along the second axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,3,4], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2], [1,3,7,8], [3,6,9,7]],
+                          [[8,3,5,2], [9,7,8,2], [1,3,6,9]]],
+                         [[[7,3,4,2], [5,8,9,6], [2,4,3,7]],
+                          [[0,2,4,6], [0,1,3,2], [1,7,0,5]]]], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3], [3,1,8,7], [6,3,7,9]],
+                          [[3,8,2,5], [7,9,2,8], [3,1,9,6]]],
+                         [[[3,7,2,4], [8,5,6,9], [4,2,7,3]],
+                          [[2,0,6,4], [1,0,2,3], [7,1,5,0]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_even_odd_odd_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with odd dimension count along the second and third permutation axes and even count along the first axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,3,5], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2,5], [1,3,7,8,9], [3,6,9,7,0]],
+                          [[8,3,5,2,1], [9,7,8,2,3], [1,3,6,9,5]]],
+                         [[[7,3,4,2,0], [5,8,9,6,3], [2,4,3,7,1]],
+                          [[0,2,4,6,7], [0,1,3,2,8], [1,7,0,5,9]]]], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3,9], [3,1,8,7,5], [6,3,7,9,5]],
+                          [[3,8,2,5,3], [7,9,2,8,1], [3,1,9,6,0]]],
+                         [[[3,7,2,4,3], [8,5,6,9,0], [4,2,7,3,9]],
+                          [[2,0,6,4,8], [1,0,2,3,7], [7,1,5,0,1]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_odd_odd_odd_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with odd dimension count along the three permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[3,3,5], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2,5], [1,3,7,8,9], [3,6,9,7,0]],
+                          [[8,3,5,2,1], [9,7,8,2,3], [1,3,6,9,5]],
+                          [[1,5,3,7,4], [1,3,8,7,2], [7,3,5,2,9]]],
+                         [[[7,3,4,2,0], [5,8,9,6,3], [2,4,3,7,1]],
+                          [[0,2,4,6,7], [0,1,3,2,8], [1,7,0,5,9]],
+                          [[6,8,3,5,2], [1,3,6,9,8], [2,4,3,6,8]]]], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3,9], [3,1,8,7,5], [6,3,7,9,5]],
+                          [[3,8,2,5,3], [7,9,2,8,1], [3,1,9,6,0]],
+                          [[5,1,7,3,2], [3,1,7,8,4], [3,7,2,5,9]]],
+                         [[[3,7,2,4,3], [8,5,6,9,0], [4,2,7,3,9]],
+                          [[2,0,6,4,8], [1,0,2,3,7], [7,1,5,0,1]],
+                          [[8,6,5,3,8], [3,1,9,6,2], [4,2,6,3,8]]]], dtype=tf.keras.backend.floatx())
 
         # Observe
         y_hat = permutation_layer(x=x)
@@ -1075,4 +1098,4 @@ class TestActivationNormalization(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestSquareWave().test_call_2_axes_input_1_odd_axis_permutation()
+    TestCheckerBoard().test_call_4_axes_3_odd_odd_odd_permutation()

@@ -43,4 +43,4 @@ class TestSupervisedFactorLoss(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestSupervisedFactorLoss().test_compute()
+    TestSupervisedFactorLoss.test_compute(None)

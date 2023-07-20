@@ -137,6 +137,7 @@ def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_f
     
     # Loop over batches
     for batch_size in [batch_size] * (instance_count // batch_size) + [instance_count - batch_size * (instance_count // batch_size)]:
+        if batch_size == 0: return # If instance_count // batch_size == instance_count / batch_size then the last batch size will be 0 and can be omitted
         a = np.random.randint(low=0, high=instance_count, size=batch_size)
         b = np.random.randint(low=0, high=instance_count, size=batch_size)
 

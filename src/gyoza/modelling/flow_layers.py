@@ -662,7 +662,7 @@ class Reflection(FlowLayer):
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`. **IMPORTANT**: These axes are distinct from the learnable reflection axes.
     :type axes: List[int]
-    :param reflection_count: The number of successive reflections that shall be executed.
+    :param reflection_count: The number of successive reflections that shall be executed. Expected to be at least 1.
     :type reflection_count: int
 
     Referenes:
@@ -671,6 +671,9 @@ class Reflection(FlowLayer):
     """
 
     def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs):
+        # Input validity
+        assert 1 <= reflection_count, f'The input reflection_count was expected to be at least 1 but found to be {reflection_count}.'
+        
         # Super
         super(Reflection, self).__init__(shape=shape, axes=axes, **kwargs)
 

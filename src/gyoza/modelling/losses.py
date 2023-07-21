@@ -1,6 +1,7 @@
 import tensorflow as tf 
 import numpy as np
 from typing import List, Tuple
+import copy as cp
 
 class UnsupervisedFactorLoss():
     r"""k
@@ -47,16 +48,16 @@ class SupervisedFactorLoss():
         - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
 
-    def __init__(self, factor_dimension_counts: List[int], sigma: float = 0.975, *args):
+    def __init__(self, dimensions_per_factor: List[int], sigma: float = 0.975, *args):
         
         # Super
         super(SupervisedFactorLoss, self).__init__(*args)
 
         # Attributes
-        self.i = factor_dimension_counts[0]
-        factor_masks = np.zeros(shape=[len(factor_dimension_counts), np.sum(factor_dimension_counts)])
+        factor_count = len(dimensions_per_factor)
+        factor_masks = np.zeros(shape=[factor_count, np.sum(dimensions_per_factor)])
         total = 0
-        for u, dimension_count in enumerate(factor_dimension_counts): 
+        for u, dimension_count in enumerate(dimensions_per_factor): 
             factor_masks[u, total:total+dimension_count] = 1
             total += dimension_count
         self.__factor_masks__ = tf.constant(factor_masks, dtype=tf.keras.backend.floatx()) 
@@ -65,7 +66,9 @@ class SupervisedFactorLoss():
         self.__sigma__ = sigma
         """Hyperparameter in (0,1) indicating clustering strength between pairs of instances."""
 
-    def compute(self,y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
+        self.__factor_dimension_counts__ = cp.copy(dimensions_per_factor)
+
+    def compute(self, y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
         """Computes the loss.
         
         :param y_true: A matrix of shape [batch size, factor count], that indicates for each pair in the batch and each factor, to 
@@ -76,7 +79,6 @@ class SupervisedFactorLoss():
             the second pair does not have anything in common. The residual factor (located at index 0) is typically not the same for
             any two instances and thus usually stores a zero in this array. The hyperparameter sigma (typically close to 1) should be 
             set to reflect the category resemblance of instances. 
-            do not resemble. In ca
         :type y_true: :class:`tensorflow.Tensor`
         :param y_pred: A tuple containing [z_tilde_a, z_tilde_b, j_a, j_b]. 
         :type y_pred: Tuple[:class:`tensorflow.Tensor`]
@@ -107,13 +109,8 @@ class SupervisedFactorLoss():
         assert y_true.shape[0] == z_tilde_a.shape[0], f"The inputs y_true and z_tilde are assumed to have the same number of instances in the batch. Found {y_true.shape[0]} and {z_tilde_a.shape[0]}, respectively."
         
         # Convenience variables
+        batch_size, factor_count = y_true.shape
         dimension_count =  z_tilde_a.shape[1] 
-        
-        factor_mask = np.zeros([y_true.shape[0], dimension_count], dtype=tf.keras.backend.floatx()) # Is 1 for all dimensions of factors shared by a pair z^a, z^b and 0 elsewhere
-        for i, instance in enumerate(y_true):
-            for f, similarity in enumerate(instance): # f = factor index
-                factor_mask[i] = factor_mask[i] + similarity * self.__factor_masks__[f]
-        factor_mask = factor_mask / (len(self.__factor_masks__)-1) # Ensures that factor mask is in range [0,1]
         
         # Implement formula (10) of referenced paper
         # L = sum_{F=1}^K expected_value_{x^a,x^b ~ p(x^a, x^b | F)} l(E(x^a), E(x^b)| F)       (term 10)
@@ -122,22 +119,27 @@ class SupervisedFactorLoss():
         #                 + 0.5 * ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2) (term 9) 
         # NOTE: The authors forgot the multiplier 0.5 in front. Since it is not applied to each entire term, it does make a difference for the final result 
 
-        # This one leads points a to be multivariate normal
-        term_7 = 0#.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
+        # Iterate factors (according to term 10)
+        for f in range(1, factor_count): # Excludes residual factor
+            
+            # This one leads points a to be multivariate normal
+            term_7 = 0.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
+            
+            # This leads points b to be normal along all other factor than f
+            term_8 = 0
+            for f_other in range(0, factor_count): # Includes residual factor
+                if f_other != f: 
+                    factor_mask = tf.repeat(self.__factor_masks__[f_other,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
+                    term_8 += 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b, 2), axis=1)  # Shape == [batch size]
+            term_8 -= j_b
+
+            # This leads points a and b (if they are labelled similar for current factor) to be close to each other
+            factor_mask = tf.repeat(self.__factor_masks__[f,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
+            sigma = y_true[:,f][:,tf.newaxis] # shape == [batch size, 1]
+            term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - sigma * z_tilde_a, 2) / (1.0-sigma**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
         
-        # This leads points b to be normal along residual factor and all the factors where they are labelled distinct
-        term_8 = 0#.5 * tf.reduce_sum((1-factor_mask) * tf.pow(z_tilde_b, 2), axis=1) - j_b  # Shape == [batch size]
-        
-        # This leads points a and b (if they are labelled similar) to be close to each other
-        term_9 = 0#.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2), axis=1)   # Shape == [batch size]
-        
-        # This leads points a and b (if they are labelled distinct) to be far away from each other
-        term_10 = 0.5 * tf.reduce_sum(((1-factor_mask) / (1+tf.pow(z_tilde_b - z_tilde_a, 2)))[:,self.i:], axis=1)   # Shape == [batch size]
-        
-        # This leads the dimensions of the output to be orthogonal
-        #cov = tf_cov(tf.concat([z_tilde_a, z_tilde_b], axis=0))
-        term_cov = 0#.5 * (cov.shape[0]**2 - cov.shape[0]) * tf.reduce_sum(tf.pow(cov * (1.0 - tf.eye(dimension_count, dtype=tf.keras.backend.floatx())), 2))
-        loss = tf.reduce_mean(term_7 + term_8 + term_9 + term_10, axis=0)  # Shape == [1]
+        # Take mean across instances (according to term 10)
+        loss = tf.reduce_mean(term_7 + term_8 + term_9, axis=0)  # Shape == [1]
         
         # Outputs
         return loss
@@ -148,3 +150,41 @@ def tf_cov(x):
     vx = tf.matmul(tf.transpose(x), x)/tf.cast(tf.shape(x)[0], tf.keras.backend.floatx())
     cov_xx = vx - mx
     return cov_xx
+
+"""
+    def forward(self, samples, logdets, factors=[0,0,1,1,1,2], global_step):
+        # eq 7
+        sample1 = samples["example1"]
+        logdet1 = logdets["example1"]
+        nll_loss1 = torch.mean(nll(torch.cat(sample1, dim=1)))
+        assert len(logdet1.shape) == 1
+        nlogdet_loss1 = -torch.mean(logdet1)
+        loss1 = nll_loss1 + nlogdet_loss1
+
+        # eq. 9
+        sample2 = samples["example2"]
+        logdet2 = logdets["example2"]
+        factor_mask = [ # same for all instances
+                torch.tensor(((factors==i) | ((factors<0) & (factors!=-i)))[:,None,None,None]).to(
+                    sample2[i]) for i in range(len(sample2))] # i iterates factors
+        factor_mask = [[1,1,0,0,0,0], # f0
+                       [0,0,1,1,1,0], # f1
+                       [0,0,0,0,0,1]] # f2
+        sample2_cond = [
+                sample2[i] - factor_mask[i]*self.rho*sample1[i]
+                for i in range(len(sample2))]
+        
+        nll_loss2 = [nll(sample2_cond[i]) for i in range(len(sample2_cond))]
+        nll_loss2 = [nll_loss2[i]/(1.0-factor_mask[i][:,0,0,0]*self.rho**2)
+                for i in range(len(sample2_cond))]
+
+        # eq 10
+        nll_loss2 = [torch.mean(nll_loss2[i]) # i is factor, mean is across instances
+                for i in range(len(sample2_cond))] # sample2_cond.shape == [factor count, ...]
+        nll_loss2 = sum(nll_loss2) # Sum across factors 
+        assert len(logdet2.shape) == 1
+        nlogdet_loss2 = -torch.mean(logdet2)
+        loss2 = nll_loss2 + nlogdet_loss2
+
+        loss = loss1 + loss2
+"""

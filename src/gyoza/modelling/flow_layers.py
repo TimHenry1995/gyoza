@@ -823,9 +823,9 @@ class SequentialFlowNetwork(FlowLayer):
 
 class SupervisedFactorNetwork(SequentialFlowNetwork):
 
-    def __init__(self, sequence: List[FlowLayer], factor_dimension_count: List[int], **kwargs):
+    def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
-        self.__loss__ = mls.SupervisedFactorLoss(factor_dimension_counts=factor_dimension_count)
+        self.__loss__ = mls.SupervisedFactorLoss(dimensions_per_factor=dimensions_per_factor)
 
     def train_step(self, data):
         """_summary_

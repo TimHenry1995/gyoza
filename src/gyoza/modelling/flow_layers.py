@@ -52,6 +52,30 @@ class FlowLayer(tf.keras.Model, ABC):
         self.__axes__ = cp.copy(axes)
         """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
+    def fit(self, iterator: tf.keras.utils.Sequence, epoch_count: int) -> tf.Tensor:
+        """Fits self to data. Assumes that the model is compiled with loss and an optimizer and has a train_step implementation.
+
+        :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...]. 
+        :type iterator: :class:`tf.keras.utils.Sequential`
+        :param epoch_count: The number of times self shall be calibrated on `iterator`. 
+        :type epoch_count: int
+        :return: epoch_losses (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
+        """
+        
+        epoch_losses = [None] * epoch_count
+        batch_losses = [None] * len(iterator)
+        
+        # Iterate epochs
+        for e in range(epoch_count):
+            
+            # Iterate batches
+            for b, batch in enumerate(iterator): batch_losses[b] = self.train_step(data=batch).numpy()
+            print(batch_losses)
+            epoch_losses[e] = np.mean(batch_losses)
+
+        # Outputs
+        return epoch_losses
+
     @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.

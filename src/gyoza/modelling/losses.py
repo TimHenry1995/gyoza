@@ -4,10 +4,7 @@ from typing import List, Tuple
 import copy as cp
 
 class UnsupervisedFactorLoss():
-    r"""k
-    :math:` \tilde{z}'
-    n
-    """ 
+    pass
 
 class SupervisedFactorLoss():
     r"""
@@ -64,9 +61,10 @@ class SupervisedFactorLoss():
         """Collects masks (one per factor) that are 1 for each factor's dimensions and zero elsewhere. Shape == [factor count, dimension count]"""
 
         self.__sigma__ = sigma
-        """Hyperparameter in (0,1) indicating clustering strength between pairs of instances."""
+        """(int) - Hyperparameter in (0,1) indicating clustering strength between pairs of instances."""
 
-        self.__factor_dimension_counts__ = cp.copy(dimensions_per_factor)
+        self.__dimensions_per_factor__ = cp.copy(dimensions_per_factor)
+        """(:class:`List[int]`) - The number of dimensions per factor. Length equals factor count."""
 
     def compute(self, y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
         """Computes the loss.

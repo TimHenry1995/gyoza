@@ -31,6 +31,9 @@ class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
         # Input validity
         assert len(x_file_names) == len(y_file_names), f"The inputs x_file_names and y_file_names were expected to have the same length but were found to have length {len(x_file_names)}, {len(y_file_names)}, respectively."
         
+        # Super
+        super(PersistentFactorizedPairIterator, self).__init__()
+
         # Attributes
         self.__data_path__ = data_path
         self.__x_file_names__ = cp.copy(x_file_names)
@@ -46,14 +49,14 @@ class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
         return int(np.floor(len(self.__x_file_names__) / self.batch_size))
 
     def __getitem__(self, index: int) -> Tuple[tf.Tensor, tf.Tensor]:
-        """Iterates a batch of data. For details see ``PairIterator`` description.
+        """Iterates a batch of data. For details see ``PersistentFactorizedPairIterator`` description.
         
-        :param index: The index of the first data point x_a in the current batch hat shall be selected from the entire data set.
+        :param index: The index of the first data point x_a in the current batch that shall be selected from the entire data set.
         :type index: int
 
-        :return:
-            - X (:class:`tensorflow.Tensor`) - A pairs of instances x_a, x_b. The x_a instance is always taken from the batch of instances in range [``index``, ``index``+:py:attr:`self.batch_size`] (in order), while x_b is drawn uniformly at random from :py:attr:`self.__indices__`. Shape == [len(indices), 2, :py:attr:`self.__shape__`].
-            - Y (:class`tensorflow.Tensor`) - A tensor of ones and zeros with shape == [:py:attr:`batch_size`, factor count], indicating for each factor wether the two instances have the same label or not.
+        :yield:
+            - X (:class:`tensorflow.Tensor`) - See class description :class:`PersistentFactorizedPairIterator`.
+            - Y (:class`tensorflow.Tensor`) - See class description :class:`PersistentFactorizedPairIterator`.
         """
         
         # Generate indices of the batch
@@ -99,6 +102,82 @@ class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
 
         # Outputs
         return tf.constant(X, dtype=tf.keras.backend.floatx()), tf.constant(Y, dtype=tf.keras.backend.floatx())
+
+class VolatileFactorizedPairIterator(tf.keras.utils.Sequence):
+    """This iterator yields pairs of instances :math:`X_{ab}` along with their corresponding factorized similarity `:math:`Y_{ab}``. 
+        Pairs are obtained by selecting ``batch_size`` consecutive instance of ``X`` for :math:`X_a`. These indices are consecutive 
+        within and across batches. For each such :math:`X_a` instance, an arbitrary instance from ``X`` is chosen for :math:`X_b`. 
+        It is thus possible that a pair in :math:'X_{ab}' has the same instance in the :math:`a` and :math:`b` entry, yet unlikely for 
+        large instance counts in ``X``. The iterator produces instance count // ``batch_size`` many batches, all of which are of size 
+        ``batch_size``. **IMPORTANT:** For best results it is recommended to shuffle ``X`` along the instance axis before passing it 
+        to this iterator.
+
+        :param X: Input data of shape [instance count, ...], where ... is any shape convenient for the caller. **IMPORTANT:** In order
+            to save memory, ``X`` is not copied during initialization. This class does not alter it but results can be affected if 
+            ``X`` is altered outside this class. 
+        :type X: :class:`numpy.ndarray` or :class:`tensorflow.Tensor`
+        :param Y: Scores of factors of shape [instance count, factor count]. **IMPORTANT:** The same memory restriction applies as 
+            for ``X``.
+        :type Y: :class:`numpy.ndarray` or :class:`tensorflow.Tensor`
+        :param similarity_function: A callable that takes as input Y_a (:class:`numpy.nparray` or :class:`tensorflow.Tensor`), Y_b 
+            (:class:`numpy.nparray` or :class:`tensorflow.Tensor`) which are each Y representation of shape [``batch_size``, 
+            factor_count]. It then calculates the similarity for each factor and outputs a :class:`tensorflow.Tensor` of shape
+            [``batch_size``, factor count].
+        :type similarity_function: :class:`Callable`
+        :param batch_size: Desired number of instances per batch
+        :type batch_size: int
+
+        :yield: 
+            - X_a_b (:class:`tensorflow.Tensor`) - A batch of instance pairs of shape [<=`batch_size`,
+                2, ...], where 2 is due to the concatenation of X_a and X_b and ... is the same instance-wise shape as for ``X``. 
+            - Y_a_b (:class:`tensorflow.Tensor`) - The corresponding batch of similarities as obtained by feeding the instances of X_a 
+                and X_b into ``similarity_function``. It has shape [``batch_size``, factor count].    
+        """
+
+    def __init__(self, X: np.ndarray, Y: np.ndarray, similarity_function: Callable, batch_size: int):
+        
+        # Input validity
+        assert len(X.shape) > 0 and Y.shape[0] > 0 and X.shape[0] == Y.shape[0], f"The inputs X and Y were expected to have the same number of instances along the initial axis, yet X has shape {X.shape} and Y has shape {Y.shape}."
+        assert len(Y.shape) == 2, f"The shape of Y should be [instance count, factor count], but found {Y.shape}."
+        assert Y.shape[0] >= 2 and Y.shape[1] == similarity_function(Y[0:1,:], Y[1:2,:]).shape[1], f"The similarity function is expected to provide factor count many outputs but this could not be verified when feeding the first two instances in."
+
+        # Super
+        super(VolatileFactorizedPairIterator, self).__init__()
+
+        # Attributes
+        self.__X__ = X
+        self.__Y__ = Y
+        self.__similarity_function__ = similarity_function
+        self.__batch_size__ = batch_size
+    
+    def __len__(self) -> int:
+        """Computes the number of batches per epoch"""
+        return self.__X__.shape[0] // self.__batch_size__
+
+    def __getitem__(self, index: int) -> Tuple[tf.Tensor, tf.Tensor]:
+        """Iterates a batch of data. For details see ``VolatileFactorizedPairIterator`` description.
+        
+        :param index: The index of the first data point x_a in the current batch hat shall be selected from the entire data set.
+        :type index: int
+
+        :return:
+            - X (:class:`tensorflow.Tensor`) - See base class :class:`VolatileFactorizedPairIterator`.
+            - Y (:class`tensorflow.Tensor`) - See base class :class:`VolatileFactorizedPairIterator`.
+        """
+        
+        # Convenience variables
+        instance_count = self.__Y__.shape[0]
+        
+        # Loop over batches
+        a = list(range(index, index+self.__batch_size__, 1))
+        b = np.random.randint(low=0, high=instance_count, size=self.__batch_size__)
+
+        X_a = tf.cast(self.__X__[a,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
+        X_b = tf.cast(self.__X__[b,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
+        X_a_b = tf.concat([X_a, X_b], axis=1)
+        Y_a_b = tf.cast(self.__similarity_function__(self.__Y__[a,:], self.__Y__[b,:]), tf.keras.backend.floatx())
+
+        return X_a_b, Y_a_b
 
 
 def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_function: Callable, batch_size: int):

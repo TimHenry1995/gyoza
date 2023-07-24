@@ -52,29 +52,34 @@ class FlowLayer(tf.keras.Model, ABC):
         self.__axes__ = cp.copy(axes)
         """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
-    def fit(self, iterator: tf.keras.utils.Sequence, epoch_count: int) -> tf.Tensor:
+    def fit(self, iterator: tf.keras.utils.Sequence, epoch_count: int, batch_count) -> tf.Tensor:
         """Fits self to data. Assumes that the model is compiled with loss and an optimizer and has a train_step implementation.
 
         :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...]. 
         :type iterator: :class:`tf.keras.utils.Sequential`
         :param epoch_count: The number of times self shall be calibrated on `iterator`. 
         :type epoch_count: int
-        :return: epoch_losses (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
+        :param batch_count: The number of times a new batch shall be drawn from the `iterator`. 
+        :type batch_count: int
+        :return: 
+            - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
+            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
         """
         
-        epoch_losses = [None] * epoch_count
-        batch_losses = [None] * len(iterator)
+        epoch_loss_means = [None] * epoch_count
+        epoch_loss_standard_deviations = [None] * epoch_count
+        batch_losses = [None] * batch_count
         
         # Iterate epochs
         for e in range(epoch_count):
             
             # Iterate batches
-            for b, batch in enumerate(iterator): batch_losses[b] = self.train_step(data=batch).numpy()
-            print(batch_losses)
-            epoch_losses[e] = np.mean(batch_losses)
+            for b in range(batch_count): batch_losses[b] = self.train_step(data=next(iterator)).numpy()
+            epoch_loss_means[e] = np.mean(batch_losses)
+            epoch_loss_standard_deviations[e] = np.std(batch_losses)
 
         # Outputs
-        return epoch_losses
+        return epoch_loss_means, epoch_loss_standard_deviations
 
     @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:

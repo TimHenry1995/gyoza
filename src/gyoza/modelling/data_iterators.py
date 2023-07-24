@@ -199,9 +199,9 @@ def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_f
     :type batch_size: int
 
     :yield: 
-        - X_a_b (:class:`tensorflow.Tensor`) - A batch of instance pairs of shape [<=`batch_size`,
+        - X_ab (:class:`tensorflow.Tensor`) - A batch of instance pairs of shape [<=`batch_size`,
             2, ...], where 2 is due to the concatenation of X_a and X_b and ... is the same instance-wise shape as for ``X``. 
-        - Y_a_b (:class:`tensorflow.Tensor`) - The corresponding batch of similarities as obtained by feeding the instances of X_a 
+        - Y_ab (:class:`tensorflow.Tensor`) - The corresponding batch of similarities as obtained by feeding the instances of X_a 
             and X_b into ``similarity_function``. It has shape [``batch_size``, factor count].
         
     """
@@ -215,16 +215,16 @@ def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_f
     instance_count = Y.shape[0]
     
     # Loop over batches
-    for batch_size in [batch_size] * (instance_count // batch_size) + [instance_count - batch_size * (instance_count // batch_size)]:
-        if batch_size == 0: return # If instance_count // batch_size == instance_count / batch_size then the last batch size will be 0 and can be omitted
+    while True:
+        
+        # Select indices for instances a and b
         a = np.random.randint(low=0, high=instance_count, size=batch_size)
         b = np.random.randint(low=0, high=instance_count, size=batch_size)
 
+        # Select corresponding data points
         X_a = tf.cast(X[a,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
         X_b = tf.cast(X[b,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
-        X_a_b = tf.concat([X_a, X_b], axis=1)
-        Y_a_b = tf.cast(similarity_function(Y[a,:], Y[b,:]), tf.keras.backend.floatx())
+        X_ab = tf.concat([X_a, X_b], axis=1)
+        Y_ab = tf.cast(similarity_function(Y[a,:], Y[b,:]), tf.keras.backend.floatx())
 
-        yield X_a_b, Y_a_b
-
-    return
+        yield X_ab, Y_ab

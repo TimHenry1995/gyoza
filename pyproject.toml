@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "gyoza"
-version = "0.0.5"
+version = "0.0.6"
 authors = [
   { name="Tim Dick", email="timdi@icloud.com" },
 ]

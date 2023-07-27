@@ -19,13 +19,12 @@ ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.to
 cd to docs directory, run make html
 
 Uploading to pypi
-pip install -e .
-change version number in pyproject.toml 
+update version number in pyproject.toml 
 and include all new libraries in pyproject.toml (same as in requirements)
 pip install -e .
 python -m build
-remove builds from the old version in the build folder
+remove builds from the old version in the dist folder
 python -m twine upload dist/*
 user_name __token__
 password on windows pypi-AgEIcHlwaS5vcmcCJDQ0YzVlNzQ1LWIwNzktNGM3ZS04ZWI4LWI2MWY4NjJkZGY3ZgACKlszLCIxMTVjNzk1OC1kNThlLTQ2MTgtYTNhMy04NGIxMDliZGE1NDIiXQAABiCB2cik4i3MzPEBqni4IUagovN0FSMZJdjVQwJStG9n5A
-password on mac pypi-AgEIcHlwaS5vcmcCJDE1OTVlMzY4LWNjODItNDgwZi05ODJlLWQ3OGMyOTFhNjg1NgACDVsxLFsiZ3lvemEiXV0AAixbMixbIjUzZTQ3OWY2LTQ3YTYtNDA2ZS04ZWFjLTQ1YTA1Yjc0ZWEwNyJdXQAABiBq3PIYUbwdy_e5_1ZOoM6UbJljgpAowgca5lJJzEiKtw
+password on mac pypi-AgEIcHlwaS5vcmcCJGYyMTdmYzlkLTYyMWUtNDcxNi1hNDUwLTMyYTkzYjY1ZWI4ZgACKlszLCIxMTVjNzk1OC1kNThlLTQ2MTgtYTNhMy04NGIxMDliZGE1NDIiXQAABiDnErlFvnRmVvM7eukQjV3xvcF0r29t9ySzXoqK4xEmYg

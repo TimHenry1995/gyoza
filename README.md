@@ -14,6 +14,7 @@ Detailed documentation can be found on the companion website of [read-the-docs](
 Developers can access the package via [GitHub](https://github.com/TimHenry1995/gyoza)
 
 ## Tutorial
+Tutorials can be found in the [tutorials](https://github.com/TimHenry1995/gyoza/tree/main/tutorials) folder of this repository.
 
 ### Creating Models
 Flow models can be created in the same way as [tensorflow models](https://keras.io/api/models/model/). Consider the following example
@@ -64,4 +65,4 @@ new_model.build(input_shape=x.shape) # Ensures model weights are initialized
 new_model.load_weights(path)
 ```
 
-Serialization via the entire model, instead of the mere weights, via [save_model](https://www.tensorflow.org/api_docs/python/tf/keras/saving/save_model) and [load_model](https://www.tensorflow.org/api_docs/python/tf/keras/saving/load_model) methods is not supported by all layers of this package and thus deprecated.
+Serialization via the entire model, instead of the mere weights, via [save_model](https://www.tensorflow.org/api_docs/python/tf/keras/saving/save_model) and [load_model](https://www.tensorflow.org/api_docs/python/tf/keras/saving/load_model) methods is not supported by all layers of this package and thus not recommended.

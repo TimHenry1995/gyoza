@@ -31,5 +31,4 @@ python -m build
 remove builds from the old version in the dist folder
 python -m twine upload dist/*
 user_name __token__
-password on windows pypi-AgEIcHlwaS5vcmcCJDQ0YzVlNzQ1LWIwNzktNGM3ZS04ZWI4LWI2MWY4NjJkZGY3ZgACKlszLCIxMTVjNzk1OC1kNThlLTQ2MTgtYTNhMy04NGIxMDliZGE1NDIiXQAABiCB2cik4i3MzPEBqni4IUagovN0FSMZJdjVQwJStG9n5A
-password on mac pypi-AgEIcHlwaS5vcmcCJGYyMTdmYzlkLTYyMWUtNDcxNi1hNDUwLTMyYTkzYjY1ZWI4ZgACKlszLCIxMTVjNzk1OC1kNThlLTQ2MTgtYTNhMy04NGIxMDliZGE1NDIiXQAABiDnErlFvnRmVvM7eukQjV3xvcF0r29t9ySzXoqK4xEmYg
+get one time token from pypi

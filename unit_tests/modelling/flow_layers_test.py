@@ -5,34 +5,35 @@ import gyoza.modelling.standard_layers as msl
 import gyoza.modelling.masks as mms
 from tensorflow.python.ops.parallel_for.gradients import jacobian
 import os
+import shutil
 
 class TestAdditiveCoupling(unittest.TestCase):
     
-    def test_init_1_dimensional(self):
-        """Tests whether an instance of AdditiveCoupling can be created for a 1-dimensional coupling."""
+    def test_init_1_axis(self):
+        """Tests whether an instance of AdditiveCoupling can be created for a 1-axis coupling."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.models.Sequential([tf.keras.layers.Dense(units=5, activation='tanh')])
-        mask = mms.HeaviSide(axes=[2], shape=[5]) # Heaviside mask
+        mask = mms.Heaviside(axes=[2], shape=[5]) # Heaviside mask
         mfl.AdditiveCoupling(axes=[2], shape=[5], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
-    def test_init_2_dimensional(self):
-        """Tests whether an instance of AdditiveCoupling can be created for a 2-dimensional coupling."""
+    def test_init_2_axes(self):
+        """Tests whether an instance of AdditiveCoupling can be created for a 2-axes coupling."""
 
         # Initialize
-        compute_coupling_parameters = msl.ChannelWiseConvolution2D(layer_count=1, conv2D_kwargs={'filters':1, 'kernel_size':2, 'padding':'same', 'activation':'tanh'}) 
+        compute_coupling_parameters = msl.ChannelWiseConvolutionTwoAxes(layer_count=1, conv2D_kwargs={'filters':1, 'kernel_size':2, 'padding':'same', 'activation':'tanh'}) 
         
-        mask = mms.SquareWave2D(axes=[1,2], shape=[2,5]) 
+        mask = mms.CheckerBoard(axes=[1,2], shape=[2,5]) 
         mfl.AdditiveCoupling(axes=[1,2], shape=[2,5],compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
-    def test_call_1_dimensional(self):
-        """Tests whether the call method of AdditiveCoupling can do 1-dimensional coupling."""
+    def test_call_1_axis(self):
+        """Tests whether the call method of AdditiveCoupling can do 1-axis coupling."""
 
         # Initialize
-        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
-        mask = mms.HeaviSide(axes=[1],shape=[4])
+        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
+        mask = mms.Heaviside(axes=[1],shape=[4])
         layer = mfl.AdditiveCoupling(shape=[4], axes=[1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,4,3])
+        x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,4,3])
 
         # Target
         x_target = x.numpy()
@@ -46,14 +47,14 @@ class TestAdditiveCoupling(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_call_2_dimensional(self):
-        """Tests whether the call method of AdditiveCoupling can do 2-dimensional coupling."""
+    def test_call_2_axes(self):
+        """Tests whether the call method of AdditiveCoupling can do 2-axes coupling."""
 
         # Initialize
-        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
-        mask = mms.SquareWave2D(axes=[1,2], shape=[2,4])
+        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
+        mask = mms.CheckerBoard(axes=[1,2], shape=[2,4])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [1,2,4,3])
+        x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [1,2,4,3])
 
         # Target
         x_target = x.numpy()
@@ -68,14 +69,14 @@ class TestAdditiveCoupling(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_invert_1_dimensional(self):
-        """Tests whether the inverse method of AdditiveCoupling can do 1-dimensional decoupling."""
+    def test_invert_1_axis(self):
+        """Tests whether the inverse method of AdditiveCoupling can do 1-axis decoupling."""
 
         # Initialize
-        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
-        mask = mms.HeaviSide(axes=[1], shape=[4])
+        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
+        mask = mms.Heaviside(axes=[1], shape=[4])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,4,3])
+        x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,4,3])
         y_hat = x.numpy()
         y_hat[:,:2,:] += 1
         y_hat = tf.constant(y_hat)
@@ -90,14 +91,14 @@ class TestAdditiveCoupling(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_invert_2_dimensional(self):
-        """Tests whether the inverse method of AdditiveCoupling can do 2-dimensional decoupling."""
+    def test_invert_2_axes(self):
+        """Tests whether the inverse method of AdditiveCoupling can do 2-axes decoupling."""
 
         # Initialize
-        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.float32) 
-        mask = mms.SquareWave2D(axes=[1,2], shape=[2,4])
+        compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
+        mask = mms.CheckerBoard(axes=[1,2], shape=[2,4])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [1,2,4,3])
+        x = tf.random.normal([1,2,4,3], dtype=tf.keras.backend.floatx())
         y_hat = x.numpy()
         y_hat[0,0,::2,:] +=1
         y_hat[0,1,1::2,:] += 1
@@ -111,10 +112,10 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
+        self.assertAlmostEqual(first=tf.reduce_sum((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_call_triangular_jacobian_2_dimensional_input_heaviside_mask(self):
-        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 2-dimensional inputs 
+    def test_call_triangular_jacobian_2_axes_input_heaviside_mask(self):
+        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 2-axes inputs 
         with Heaviside mask."""
 
         # Initialize
@@ -122,9 +123,9 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.HeaviSide(axes=[1], shape=[7])
+        mask = mms.Heaviside(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
+        x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
         # Compute jacobian
         x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
@@ -144,18 +145,18 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_call_triangular_jacobian_2_dimensional_input_square_wave_1_d_mask(self):
-        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 2-dimensional inputs 
-        with a square wave 1D mask."""
+    def test_call_triangular_jacobian_2_axes_input_checker_board_1_axis_mask(self):
+        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 2-axes inputs 
+        with a checker board 1 axis mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.SquareWave1D(axes=[1], shape=[7])
+        mask = mms.CheckerBoard(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
+        x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
         # Compute jacobian
         x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
@@ -175,18 +176,18 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_call_triangular_jacobian_3_dimensional_input_square_wave_2_d_mask(self):
-        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 3-dimensional inputs 
-        with square wave 2D mask."""
+    def test_call_triangular_jacobian_3_axes_input_checker_board_2_axes_mask(self):
+        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 3-axes inputs 
+        with checker board 2_axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.SquareWave2D(axes=[1,2], shape=[2,7])
+        mask = mms.CheckerBoard(axes=[1,2], shape=[2,7])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(14*3,dtype=tf.float32), [3,2,7])
+        x = tf.reshape(tf.range(14*3,dtype=tf.keras.backend.floatx()), [3,2,7])
 
         # Compute jacobian
         x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
@@ -204,15 +205,15 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_call_triangular_jacobian_4_dimensional_input_square_wave_2_d_mask(self):
-        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 4-dimensional inputs 
-        with square wave 2D mask."""
+    def test_call_triangular_jacobian_4_axes_input_checker_board_2_axes_mask(self):
+        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 4-axes inputs 
+        with checker board 2_axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
+        x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
         # Compute jacobian
         x_new=tf.Variable(mask.arrange(x=x)) # For J, first arrange x such that entries selected by mask are leading
@@ -234,18 +235,18 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
 
-    def test_compute_jacobian_determinant_2_dimensional_input_square_wave_1_d_mask(self):
+    def test_compute_jacobian_determinant_2_axes_input_chcker_board_1_axis_mask(self):
         """Tests whether the compute_jacobian_determinant method of AdditiveCoupling correctly computes the determinant on 
-        2-dimensional inputs with a square wave 1D mask."""
+        2-axes inputs with a checker board 1 axis mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.SquareWave1D(axes=[1], shape=[7])
+        mask = mms.CheckerBoard(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(14,dtype=tf.float32), [2,7])
+        x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
         # Observe
         x_observed = layer.compute_jacobian_determinant(x=x)
@@ -261,18 +262,18 @@ class TestAdditiveCoupling(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertEqual(first=x_observed[j], second=np.log(np.linalg.det(J[j].numpy())))  
 
-    def test_compute_jacobian_determinant_3_dimensional_input_square_wave_2_d_mask(self):
+    def test_compute_jacobian_determinant_3_axes_input_checker_board_2_axes_mask(self):
         """Tests whether the compute_jacobian_determinant method of AdditiveCoupling correctly computes the determinant on 
-        3-dimensional inputs with a square wave 2D mask."""
+        3-axes inputs with a checker board 2 axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.Sequential([
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.SquareWave2D(axes=[1,2], shape=[2,7])
+        mask = mms.CheckerBoard(axes=[1,2], shape=[2,7])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(14*3,dtype=tf.float32), [3,2,7])
+        x = tf.reshape(tf.range(14*3,dtype=tf.keras.backend.floatx()), [3,2,7])
 
         # Observe
         x_observed = layer.compute_jacobian_determinant(x=x)
@@ -291,15 +292,15 @@ class TestAdditiveCoupling(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertEqual(first=x_observed[j].numpy(), second=np.log(np.linalg.det(J[j].numpy())))  
 
-    def test_compute_jacobian_determinant_4_dimensional_input_square_wave_2_d_mask(self):
-        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 4-dimensional inputs 
-        with square wave 2D mask."""
+    def test_compute_jacobian_determinant_4_axes_input_checker_board_2_axes_mask(self):
+        """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 4-axes inputs 
+        with checker board 2 axes mask."""
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
+        x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
         # Observe
         x_observed = layer.compute_jacobian_determinant(x=x)
@@ -322,13 +323,12 @@ class TestAdditiveCoupling(unittest.TestCase):
 
 
     def test_load_and_save(self):
-
         """Tests whether the model provides the same shuffling after persistent storage."""
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
-        x = tf.reshape(tf.range(2*5*6,dtype=tf.float32), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
+        x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
         # Observe first
         y_hat_1 = layer(x=x)
@@ -340,7 +340,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         
         # Initialize again and load
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.SquareWave2D(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
         loaded_layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         loaded_layer.build(input_shape=x.shape) # Warm-up phase to initialize all weights
         loaded_layer.load_weights(path)
@@ -355,13 +355,13 @@ class TestAdditiveCoupling(unittest.TestCase):
 
 class TestShuffle(unittest.TestCase):
 
-    def test_call_and_inverse_2D_input_along_1_axis(self):
-        """Tests whether the inverse method is indeed providing the inverse of the call on a 2D input along 1 axis."""
+    def test_call_and_inverse_2_axes_input_along_1_axis(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 2_axes input along 1 axis."""
         
         # Initialize
-        channel_count = 100
-        shuffling_layer = mfl.Shuffle(shape=[channel_count], axes=[1])
-        x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
+        dimension_count = 100
+        shuffling_layer = mfl.Shuffle(shape=[dimension_count], axes=[1])
+        x = tf.random.uniform(shape=[10, dimension_count], dtype=tf.keras.backend.floatx())
         
         # Observe
         y_hat = shuffling_layer(x=x)
@@ -371,13 +371,13 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
         self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
 
-    def test_call_and_inverse_3D_input_along_2_axes(self):
-        """Tests whether the inverse method is indeed providing the inverse of the call on a 3D input along both axes."""
+    def test_call_and_inverse_3_axes_input_along_2_axes(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 3_axes input along both axes."""
         
         # Initialize
         batch_size = 2; width = 4; height = 5
         shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.float32)
+        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
         
         # Observe
         y_hat = shuffling_layer(x=x)
@@ -387,13 +387,13 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
         self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
 
-    def test_call_reliability_2D_input_along_1_axis(self):
-        """Tests whether call reproduces itself when called 2 times in a row on a 2D input along 1 axis."""
+    def test_call_reliability_2_axes_input_along_1_axis(self):
+        """Tests whether call reproduces itself when called 2 times in a row on a 2_axes input along 1 axis."""
         
         # Initialize
-        channel_count = 100
-        shuffling_layer = mfl.Shuffle(shape=[channel_count], axes=[1])
-        x = tf.random.uniform(shape=[10, channel_count], dtype=tf.float32)
+        dimension_count = 100
+        shuffling_layer = mfl.Shuffle(shape=[dimension_count], axes=[1])
+        x = tf.random.uniform(shape=[10, dimension_count], dtype=tf.keras.backend.floatx())
         
         # Observe
         y_hat_1 = shuffling_layer(x=x)
@@ -403,13 +403,13 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
-    def test_call_reliability_3D_input_along_2_axes(self):
-        """Tests whether call reproduces itself when called 2 times in a row on a 3D input along 2 axes."""
+    def test_call_reliability_3_axes_input_along_2_axes(self):
+        """Tests whether call reproduces itself when called 2 times in a row on a 3_axes input along 2 axes."""
         
         # Initialize
         batch_size = 2; width = 4; height = 5
         shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.float32)
+        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
          
         # Observe
         y_hat_1 = shuffling_layer(x=x)
@@ -425,7 +425,7 @@ class TestShuffle(unittest.TestCase):
         # Initialize
         width = 100; height = 200; channel_count = 3
         shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[10, width, height, channel_count], dtype=tf.float32)
+        x = tf.random.uniform(shape=[10, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
         # Observe first
         y_hat_1 = shuffling_layer(x=x)
@@ -445,25 +445,364 @@ class TestShuffle(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
+class TestCheckerBoard(unittest.TestCase):
+
+    def test_call_2_axes_input_1_even_axis_permutation(self):
+        """Tests whether the call method correctly swops indices on a 2 axis input with even dimension count along the permutation axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[4], axes=[1])
+        x = tf.constant([[4,6,3,2], [1,3,7,8]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[6,4,2,3], [3,1,8,7]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_2_axes_input_1_odd_axis_permutation(self):
+        """Tests whether the call method correctly swops indices on a 2 axis input with odd dimension count along the permutation axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[5], axes=[1])
+        x = tf.constant([[4,6,3,2,1], [1,3,7,8,4]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[6,4,2,3,1], [3,1,8,7,4]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_2_even_even_axes_permutation(self):
+        """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the two permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,4], axes=[1,2])
+        x = tf.constant([[[4,6,3,2], [1,3,7,8]],
+                         [[8,3,5,2], [9,7,8,2]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3], [3,1,8,7]],
+                         [[3,8,2,5], [7,9,2,8]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_2_even_odd_axes_permutation(self):
+        """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the first and odd count along the second permutation axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,5], axes=[1,2])
+        x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5]],
+                         [[8,3,5,2,4], [9,7,8,2,1]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,5], [3,1,8,7,9]],
+                         [[3,8,2,5,1], [7,9,2,8,4]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_2_odd_odd_axes_permutation(self):
+        """Tests whether the call method correctly swops indices on a 3 axis input with odd dimension count along the two permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[3,5], axes=[1,2])
+        x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5], [5,3,7,9,0]],
+                         [[8,3,5,2,4], [9,7,8,2,1], [1,3,6,0,9]]], dtype=tf.keras.backend.floatx())
+        y = tf.constant([[[6,4,2,3,5], [3,1,8,7,9], [3,5,9,7,0]],
+                         [[3,8,2,5,1], [7,9,2,8,4], [3,1,0,6,9]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_even_even_even_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with even dimension count along the three permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,2,4], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2], [1,3,7,8]],
+                          [[8,3,5,2], [9,7,8,2]]],
+                         [[[7,3,4,2], [5,8,9,6]],
+                          [[0,2,4,6], [0,1,3,2]]], 
+                          ], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3], [3,1,8,7]],
+                          [[3,8,2,5], [7,9,2,8]]],
+                         [[[3,7,2,4], [8,5,6,9]],
+                          [[2,0,6,4], [1,0,2,3]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_even_odd_even_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with even dimension count along the first and third permutation axes and odd count along the second axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,3,4], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2], [1,3,7,8], [3,6,9,7]],
+                          [[8,3,5,2], [9,7,8,2], [1,3,6,9]]],
+                         [[[7,3,4,2], [5,8,9,6], [2,4,3,7]],
+                          [[0,2,4,6], [0,1,3,2], [1,7,0,5]]]], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3], [3,1,8,7], [6,3,7,9]],
+                          [[3,8,2,5], [7,9,2,8], [3,1,9,6]]],
+                         [[[3,7,2,4], [8,5,6,9], [4,2,7,3]],
+                          [[2,0,6,4], [1,0,2,3], [7,1,5,0]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_even_odd_odd_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with odd dimension count along the second and third permutation axes and even count along the first axis."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[2,3,5], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2,5], [1,3,7,8,9], [3,6,9,7,0]],
+                          [[8,3,5,2,1], [9,7,8,2,3], [1,3,6,9,5]]],
+                         [[[7,3,4,2,0], [5,8,9,6,3], [2,4,3,7,1]],
+                          [[0,2,4,6,7], [0,1,3,2,8], [1,7,0,5,9]]]], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3,9], [3,1,8,7,5], [6,3,7,9,5]],
+                          [[3,8,2,5,3], [7,9,2,8,1], [3,1,9,6,0]]],
+                         [[[3,7,2,4,3], [8,5,6,9,0], [4,2,7,3,9]],
+                          [[2,0,6,4,8], [1,0,2,3,7], [7,1,5,0,1]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_4_axes_3_odd_odd_odd_permutation(self):
+        """Tests whether the call method correctly swops indices on a 4 axis input with odd dimension count along the three permutation axes."""
+        
+        # Initialize
+        permutation_layer = mfl.CheckerBoard(shape=[3,3,5], axes=[1,2,3])
+        x = tf.constant([[[[4,6,3,2,5], [1,3,7,8,9], [3,6,9,7,0]],
+                          [[8,3,5,2,1], [9,7,8,2,3], [1,3,6,9,5]],
+                          [[1,5,3,7,4], [1,3,8,7,2], [7,3,5,2,9]]],
+                         [[[7,3,4,2,0], [5,8,9,6,3], [2,4,3,7,1]],
+                          [[0,2,4,6,7], [0,1,3,2,8], [1,7,0,5,9]],
+                          [[6,8,3,5,2], [1,3,6,9,8], [2,4,3,6,8]]]], dtype=tf.keras.backend.floatx())
+
+        y = tf.constant([[[[6,4,2,3,9], [3,1,8,7,5], [6,3,7,9,5]],
+                          [[3,8,2,5,3], [7,9,2,8,1], [3,1,9,6,0]],
+                          [[5,1,7,3,2], [3,1,7,8,4], [3,7,2,5,9]]],
+                         [[[3,7,2,4,3], [8,5,6,9,0], [4,2,7,3,9]],
+                          [[2,0,6,4,8], [1,0,2,3,7], [7,1,5,0,1]],
+                          [[8,6,5,3,8], [3,1,9,6,2], [4,2,6,3,8]]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = permutation_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((y-y_hat)**2).numpy(), second=0)
+
+    def test_call_and_inverse_3_axes_input_even_even(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 3 axes input along 2 axes with even dimension count."""
+        
+        # Initialize
+        batch_size = 2; width = 4; height = 6
+        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
+        
+        # Observe
+        y_hat = permutation_layer(x=x)
+        x_hat = permutation_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+    def test_call_and_inverse_3_axes_input_even_odd(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 3 axes input along 2 axes even and odd dimension count."""
+        
+        # Initialize
+        batch_size = 2; width = 4; height = 7
+        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
+        
+        # Observe
+        y_hat = permutation_layer(x=x)
+        x_hat = permutation_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+    def test_call_and_inverse_4_axes_input_even_odd(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 4 axes input along 2 axes even and odd dimension count."""
+        
+        # Initialize
+        batch_size = 2; width = 4; height = 7; channel_count = 3
+        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe
+        y_hat = permutation_layer(x=x)
+        x_hat = permutation_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+class TestReflection(unittest.TestCase):
+
+    def test_call_2_axes_input_along_1_axis(self):
+        """Tests whether the call method works on a 2_axes input along 1 axis."""
+        
+        # Initialize
+        dimension_count = 3
+        reflection_layer = mfl.Reflection(shape=[dimension_count], axes=[1], reflection_count=2)
+        reflection_normals = tf.math.l2_normalize(tf.Variable([[1,1,0],[0,0,-1]], dtype=tf.keras.backend.floatx()), axis=1)
+        reflection_layer.__reflection_normals__.assign(reflection_normals) # For predictability
+        x = tf.constant([[1,2,3],[4,5,6]], dtype=tf.keras.backend.floatx())
+        x_target = tf.constant([[-2,-1,-3],[-5,-4,-6]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        x_observed = reflection_layer(x=x)
+        
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_along_1_axis(self):
+        """Tests whether the call method works on a 3 axes input along 1 axis."""
+        
+        # Initialize
+        dimension_count = 3
+        reflection_layer = mfl.Reflection(shape=[dimension_count], axes=[1], reflection_count=2)
+        reflection_normals = tf.math.l2_normalize(tf.Variable([[1,1,0],[0,0,-1]], dtype=tf.keras.backend.floatx()), axis=1)
+        reflection_layer.__reflection_normals__.assign(reflection_normals) # For predictability
+        x = tf.constant([[[1,2,3],[4,5,6]], [[7,8,9],[10,11,12]]], dtype=tf.keras.backend.floatx())
+        x = tf.transpose(x, [0,2,1])
+        x_target = tf.constant([[[-2,-1,-3],[-5,-4,-6]], [[-8,-7,-9],[-11,-10,-12]]], dtype=tf.keras.backend.floatx())
+        x_target = tf.transpose(x_target, [0,2,1])
+
+        # Observe
+        x_observed = reflection_layer(x=x)
+        
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_call_3_axes_input_along_2_axis(self):
+        """Tests whether the call method works on a 3 axes input along 2 axes."""
+        
+        # Initialize
+        reflection_layer = mfl.Reflection(shape=[2,3], axes=[1,2], reflection_count=2)
+        reflection_normals = tf.math.l2_normalize(tf.Variable([[1,1,0,0,0,0],[0,0,-1,0,0,0]], dtype=tf.keras.backend.floatx()), axis=1)
+        reflection_layer.__reflection_normals__.assign(reflection_normals) # For predictability
+        x = tf.constant([[[1,2,3],[4,5,6]], [[7,8,9],[10,11,12]]], dtype=tf.keras.backend.floatx())
+        x_target = tf.constant([[[-2,-1,-3],[4,5,6]], [[-8,-7,-9],[10,11,12]]], dtype=tf.keras.backend.floatx())
+        
+        # Observe
+        x_observed = reflection_layer(x=x)
+        
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_call_and_inverse_2_axes_input_along_1_axis(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 2_axes input along 1 axis."""
+        
+        # Initialize
+        dimension_count = 3
+        reflection_layer = mfl.Reflection(shape=[dimension_count], axes=[1], reflection_count=2)
+        x = tf.constant([[1,2,3],[4,5,6]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = reflection_layer(x=x)
+        x_hat = reflection_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertAlmostEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+    def test_call_and_inverse_3_axes_input_along_2_axes(self):
+        """Tests whether the inverse method is indeed providing the inverse of the call on a 3_axes input along two axes."""
+        
+        # Initialize
+        batch_size = 2; width = 4; height = 5
+        reflection_layer = mfl.Reflection(shape=[width, height], axes=[1,2], reflection_count=2)
+        x = tf.random.uniform([batch_size, width, height], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        y_hat = reflection_layer(x=x)
+        x_hat = reflection_layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
+        self.assertAlmostEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
+
+    def test_load_and_save_4D_input_along_2_axes(self):
+        """Tests whether the model provides the same shuffling after persistent storage."""
+
+        # Initialize
+        width = 4; height = 5; dimension_count = 3
+        reflection_layer = mfl.Reflection(shape=[width, height], axes=[1,2], reflection_count=10)
+        x = tf.random.uniform(shape=[10, width, height, dimension_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe first
+        y_hat_1 = reflection_layer(x=x)
+        
+        # Save and load
+        path = os.path.join(os.getcwd(), "temporary_model_directory_for_reflection_model_unit_test.h5")
+        reflection_layer.save_weights(path)
+        del reflection_layer
+        loaded_reflection_layer = mfl.Reflection(shape=[width, height], axes=[1,2], reflection_count=10)
+        loaded_reflection_layer.build(input_shape=x.shape)
+        loaded_reflection_layer.load_weights(path)
+        os.remove(path)
+    
+        y_hat_2 = loaded_reflection_layer(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
+        self.assertAlmostEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
+
 class TestActivationNormalization(unittest.TestCase):
-    def test_init_1_dimensional(self):
-        """Tests whether an instance of ActivationNormalization can be created for a 1-dimensional input."""
+    def test_init_1_axis(self):
+        """Tests whether an instance of ActivationNormalization can be created for a 1-axis input."""
 
         # Initialize
         mfl.ActivationNormalization(axes=[2], shape=[5])
 
-    def test_init_2_dimensional(self):
-        """Tests whether an instance of ActivationNormalization can be created for a 2-dimensional input."""
+    def test_init_2_axes(self):
+        """Tests whether an instance of ActivationNormalization can be created for a 2-axes input."""
 
         # Initialize
         mfl.ActivationNormalization(axes=[1,2], shape=[2,5])
     
-    def test_call_2D_input_along_axis_1(self):
-        """Tests whether the call method of ActivatonNormalization can normalize 2D inputs along axis 1."""
+    def test_call_2_axes_input_along_axis_1(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 2_axes inputs along axis 1."""
 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [8,3])
+        x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [8,3])
 
         # Target
         l_target = tf.zeros([3])
@@ -481,12 +820,12 @@ class TestActivationNormalization(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
 
-    def test_call_3D_input_along_axes_1_2(self):
-        """Tests whether the call method of ActivatonNormalization can normalize 3D inputs along axes 1 and 2."""
+    def test_call_3_axes_input_along_axes_1_2(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 3_axes inputs along axes 1 and 2."""
 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,3,4])
+        x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,3,4])
 
         # Target
         l_target = tf.zeros([3,4])
@@ -504,12 +843,12 @@ class TestActivationNormalization(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
 
-    def test_call_3D_input_along_axes_1(self):
-        """Tests whether the call method of ActivatonNormalization can normalize 3D inputs along axis 1."""
+    def test_call_3_axes_input_along_axes_1(self):
+        """Tests whether the call method of ActivatonNormalization can normalize 3_axes inputs along axis 1."""
 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,24,dtype=tf.float32), [2,3,4])
+        x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,3,4])
 
         # Target
         l_target = tf.zeros([3])
@@ -533,7 +872,7 @@ class TestActivationNormalization(unittest.TestCase):
 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.float32), [2,3,4,5])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
 
         # Target
         l_target = tf.zeros([3])
@@ -557,7 +896,7 @@ class TestActivationNormalization(unittest.TestCase):
 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.float32), [2,3,4,5])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
 
         # Target
         l_target = tf.zeros([3,4])
@@ -582,7 +921,7 @@ class TestActivationNormalization(unittest.TestCase):
 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,5], axes=[1,3])
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.float32), [2,3,4,5])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
 
         # Target
         l_target = tf.zeros([3,5])
@@ -602,12 +941,30 @@ class TestActivationNormalization(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(s_target.shape), tuple2=tuple(s_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_mean((s_observed-s_target)**2).numpy(), second=0)
 
-    def test_compute_jacobian_determinant_2_dimensional_axis_1(self):
-        """Tests whether the activation normalization layer can compute the jacobian determinant on 2D inputs"""
+    def test_invert_4D_input_along_axes_1_3(self):
+        """Tests whether the call and invert method of ActivatonNormalization can normalize and un-normalize 4D inputs along axes 1 and 3."""
+
+        # Initialize
+        layer = mfl.ActivationNormalization(shape=[3,5], axes=[1,3])
+        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
+
+        # Target
+        x_target = x
+
+        # Observe
+        y_hat = layer(x)
+        x_observed = layer.invert(y_hat=y_hat)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x.shape))
+        self.assertAlmostEqual(first=tf.reduce_mean((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_compute_jacobian_determinant_2_axes_axis_1(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 2_axes inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,1,delta=1/24,dtype=tf.float32), [8,3])
+        x = tf.reshape(tf.range(0,1,delta=1/24,dtype=tf.keras.backend.floatx()), [8,3])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -628,12 +985,12 @@ class TestActivationNormalization(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
 
-    def test_compute_jacobian_determinant_3_dimensional_axis_1(self):
-        """Tests whether the activation normalization layer can compute the jacobian determinant on 3D inputs"""
+    def test_compute_jacobian_determinant_3_axes_axis_1(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 3_axes inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.float32), [5,3,4])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx()), [5,3,4])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -655,12 +1012,12 @@ class TestActivationNormalization(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
 
-    def test_compute_jacobian_determinant_3_dimensional_axis_2(self):
-        """Tests whether the activation normalization layer can compute the jacobian determinant on 3D inputs"""
+    def test_compute_jacobian_determinant_3_axes_axis_2(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 3_axes inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[4], axes=[2])
-        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.float32), [5,3,4])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx()), [5,3,4])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -682,12 +1039,12 @@ class TestActivationNormalization(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
-    def test_compute_jacobian_determinant_3_dimensional_axes_1_2(self):
-        """Tests whether the activation normalization layer can compute the jacobian determinant on 3D inputs"""
+    def test_compute_jacobian_determinant_3_axes_axes_1_2(self):
+        """Tests whether the activation normalization layer can compute the jacobian determinant on 3_axes inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.float32), [5,3,4])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx()), [5,3,4])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -709,12 +1066,12 @@ class TestActivationNormalization(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
 
-    def test_compute_jacobian_determinant_4_dimensional_axes_1_2(self):
+    def test_compute_jacobian_determinant_4_axes_axes_1_2(self):
         """Tests whether the activation normalization layer can compute the jacobian determinant on 4D inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,1,delta=1/120,dtype=tf.float32), [5,3,4,2])
+        x = tf.reshape(tf.range(0,1,delta=1/120,dtype=tf.keras.backend.floatx()), [5,3,4,2])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -740,4 +1097,4 @@ class TestActivationNormalization(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestActivationNormalization.test_compute_jacobian_determinant_3_dimensional_axis_2(None)
+    TestCheckerBoard().test_call_4_axes_3_odd_odd_odd_permutation()

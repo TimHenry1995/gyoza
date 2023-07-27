@@ -4,14 +4,6 @@ gyoza.utilities package
 Submodules
 ----------
 
-gyoza.utilities.file\_management module
----------------------------------------
-
-.. automodule:: gyoza.utilities.file_management
-   :members:
-   :undoc-members:
-   :show-inheritance:
-
 gyoza.utilities.math module
 ---------------------------
 

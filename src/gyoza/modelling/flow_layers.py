@@ -2,36 +2,41 @@ import numpy as np
 import tensorflow as tf
 from typing import Any, Tuple, List, Callable
 from abc import ABC
+import abc
 from gyoza.utilities import tensors as utt
 import gyoza.modelling.masks as mms
 import copy as cp
+from gyoza.modelling import losses as mls
+import random
 
 class FlowLayer(tf.keras.Model, ABC):
     """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
     initialization.
     
     :param shape: The shape of the input that shall be transformed by this layer. If you have e.g. a tensor [batch size, width, 
-        height, channel count] and you want this layer to transform along width and height you enter [width, height] as shape. If you 
-        want the layer to operate on the channels you provide [channel count] instead.
+        height, color] and you want this layer to transform along width and height, you enter the shape [width, height]. If you 
+        want the layer to operate on the color you provide [color dimension count] instead.
     :type shape: List[int]
     :param axes: The axes of transformation. In the example for ``shape`` on width and height you would enter [1,2] here, In the 
-        example for channels you would enter [3] here. ``axes`` is assumed not to contain the axis 0, i.e. the batch axis.
+        example for color you would enter [3] here. Although axes are counted starting from zero, it is assumed that ``axes`` 
+        does not contain the axis 0, i.e. the batch axis.
     :type axes: List[int]
 
     References:
 
-        - "Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio.
-        - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
-        - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh, David Krueger and Yoshua Bengio
-        - "GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images" by Aadhithya Sankar, Matthias Keicher, Rami Eisawy, Abhijeet Parida, Franz Pfister, Seong Tae Kim and  Nassir Navab1,6,†
-        - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
+        - `"Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal. <https://arxiv.org/abs/1807.03039>`_
+        - `"NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh, David Krueger and Yoshua Bengio <https://arxiv.org/abs/1410.8516>`_
+        - `"GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images" by Aadhithya Sankar, Matthias Keicher, Rami Eisawy, Abhijeet Parida, Franz Pfister, Seong Tae Kim and  Nassir Navab <https://arxiv.org/abs/2103.10868>`_
+        - `"Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon <https://arxiv.org/abs/2003.01941>`_
+        - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int]):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
         """This constructor shall be used by subclasses only"""
 
         # Super
-        super(FlowLayer, self).__init__()
+        super(FlowLayer, self).__init__(**kwargs)
 
         # Input validity
         assert len(shape) == len(axes), f"The input shape ({shape}) is expected to have as many entries as the input axes ({axes})."
@@ -42,11 +47,41 @@ class FlowLayer(tf.keras.Model, ABC):
 
         # Attributes
         self.__shape__ = cp.copy(shape)
-        """The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
+        """(:class:`List[int]`) - The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
 
         self.__axes__ = cp.copy(axes)
-        """The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
+        """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
+    def fit(self, iterator: tf.keras.utils.Sequence, epoch_count: int, batch_count) -> tf.Tensor:
+        """Fits self to data. Assumes that the model is compiled with loss and an optimizer and has a train_step implementation.
+
+        :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...]. 
+        :type iterator: :class:`tf.keras.utils.Sequential`
+        :param epoch_count: The number of times self shall be calibrated on `iterator`. 
+        :type epoch_count: int
+        :param batch_count: The number of times a new batch shall be drawn from the `iterator`. 
+        :type batch_count: int
+        :return: 
+            - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
+            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
+        """
+        
+        epoch_loss_means = [None] * epoch_count
+        epoch_loss_standard_deviations = [None] * epoch_count
+        batch_losses = [None] * batch_count
+        
+        # Iterate epochs
+        for e in range(epoch_count):
+            
+            # Iterate batches
+            for b in range(batch_count): batch_losses[b] = self.train_step(data=next(iterator)).numpy()
+            epoch_loss_means[e] = np.mean(batch_losses)
+            epoch_loss_standard_deviations[e] = np.std(batch_losses)
+
+        # Outputs
+        return epoch_loss_means, epoch_loss_standard_deviations
+
+    @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.
 
@@ -55,6 +90,7 @@ class FlowLayer(tf.keras.Model, ABC):
         :return: y_hat (:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the inverse direction. It is thus the counterpart to :py:meth:`call`.
 
@@ -64,6 +100,7 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
+    @abc.abstractmethod
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         """Computes the jacobian determinant of this layer's :py:meth:`call` on a logarithmic scale. The
         natural logarithm is chosen for numerical stability.
@@ -75,28 +112,41 @@ class FlowLayer(tf.keras.Model, ABC):
 
         raise NotImplementedError()
 
-class Shuffle(FlowLayer):
-    """Shuffles inputs along the given axes. The permutation used for shuffling is randomly chosen once during initialization. 
-    Thereafter it is saved as a private attribute. Shuffling is thus deterministic from there on.
+class Permutation(FlowLayer):
+    """This layer flattens its input :math:`x` along ``axes``, then reorders the dimensions using ``permutation`` and reshapes 
+    :math:`x` to its original shape. 
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
+    :param permutation: A new order of the indices in the interval [0, product(``shape``)).
+    :type permutation: List[int]
     """
 
-    def __init__(self, shape: List[int], axes: List[int]):
+    def __init__(self, shape: List[int], axes: List[int], permutation: List[int], **kwargs):
+
+        # Input validity
+        dimension_count = tf.reduce_prod(shape).numpy()
+        assert len(permutation) == dimension_count, f'The input permutation was expected to have length {dimension_count} based on the number of dimensions in the shape input but it was found to have length {len(permutation)}.'
 
         # Super
-        super(Shuffle, self).__init__(shape=shape, axes=axes)
-        
+        super(Permutation, self).__init__(shape=shape, axes=axes, **kwargs)
+    
         # Attributes
-        unit_count = tf.reduce_prod(shape).numpy()
-        permutation = tf.random.shuffle(tf.range(unit_count))
+        permutation = tf.constant(permutation)
         self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
-        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
+        """(:class:`tensorflow.Variable`) - Stores the permutation vector for the forward operation."""
         
+        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
+        """(:class:`tensorflow.Variable`) - Stores the permutation vector for the inverse operation."""
+
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Initialize
         old_shape = cp.copy(x.shape)
 
-        # Flatten along self.__axes__ to fit permutation matrix
+        # Flatten along self.__axes__ to fit permutation vector
         x = utt.flatten_along_axes(x=x, axes=self.__axes__)
 
         # Shuffle
@@ -127,54 +177,188 @@ class Shuffle(FlowLayer):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Copmute
+        # Compute
         batch_size = x.shape[0]
-        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
         # Outputs
         return logarithmic_determinant
 
-class Coupling(FlowLayer, ABC):
-    """This layer couples the input ``x`` with itself inside the method :py:meth:`call`. In doing so, :py:meth:`call` 
-    obtains two copies of x, referred to as x_1, x_2 using a binary mask and its negative (1-mask), respectively. The half x_1 
-    is mapped to coupling parameters via a user-provided model, called :py:meth:``compute_coupling_parameters``. This can be e.g. an 
-    artificial neural network. Next, :py:meth:`call` uses the internally defined :py:meth:`__couple__` method to couple x_2 with 
-    those parameters. This coupling is designed to be trivially invertible, given the parameters. It can be for instance y_hat = 
-    x + parameters, which has the trivial inverse x = y_hat - parameters. Due to the splitting of x and the fact that 
-    :py:func:`compute_coupling_parameters` will only be evaluated in the forward direction, the overall :py:meth:`call` 
-    method will be trivially invertible. Similarly, its Jacobian determinant remains trivial and thus tractable.
+class Shuffle(Permutation):
+    """Shuffles input :math:`x`. The permutation used for shuffling is randomly chosen once during initialization. 
+    Thereafter it is saved as a private attribute. Shuffling is thus deterministic. **IMPORTANT:** The shuffle function is defined on 
+    a vector, yet by the requirement of :class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis 
+    in ``axes``. As described in :class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the shuffling can
+    be applied. For background information see :class:`Permutation`.
+    
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Super
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = list(range(dimension_count)); random.shuffle(permutation)
+        super(Shuffle, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+    
+class Heaviside(Permutation):
+    """Swops the first and second half of input :math:`x` as inspired by the `Heaviside 
+    <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function.  **IMPORTANT:** The Heaviside function is defined on a vector, 
+    yet by the requirement of :class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis in ``axes``.
+    As described in :class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the swopping can be applied. 
+    For background information see :class:`Permutation`.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
     :param axes: See base class :class:`FlowLayer`.
     :type axes: List[int]
-    :param compute_coupling_parameters: The function that shall be used to compute parameters. See the placeholder member
-        :py:meth:`compute_coupling_parameters` for a detailed description of requirements.
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Super
+        dimension_count = tf.reduce_prod(shape).numpy()
+        permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
+        super(Heaviside, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+ 
+class CheckerBoard(Permutation):
+    """Swops the entries of inputs :math:`x` as inspired by the `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_
+    pattern. Swopping is done to preserve adjacency of cells within :math:`x`. **IMPORTANT:** The checkerboard pattern is usually
+    defined on a matrix, i.e. 2 axes. Yet, here it is possible to specify any number of axes.
+
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: :class:`List[int]`
+    :param shape: See base class :class:`FlowLayer`. 
+    :type shape: :class:`List[int]`
+    """
+
+    @staticmethod
+    def is_end_of_axis(index: int, limit: int, direction: int) -> bool:
+        """Determines whether an ``index`` iterated in ``direction`` is at the end of a given axis.
+
+        :param index: The index to be checked.
+        :type index: int
+        :param limit: The number of elements along the axis. An index is considered to be at the end if it is equal to ``limit``-1 
+            and ``direction`` == 1. 
+        :type limit: int
+        :param direction: The direction in which the index is iterated. A value of 1 indicates incremental, -1 indicates decremental.
+        :type direction: int
+        :return: An indicator for whether the endpoint has been reached.
+        :rtype: bool
+        """
+        if direction == 1: # Incremental
+            return index == limit -1
+        else: # Decremental
+            return index == 0
+
+    @staticmethod
+    def generate_rope_indices(shape: List[int]) -> List[int]:
+        """Generates indices to traverse a tensor of ``shape``. The traversal follows a rope fitted along the axes by prioritizing
+        later axes before earlier axes.
+
+        :param shape: The shape of the tensor to be traversed.
+        :type shape: :class:`List[int]`
+        :yield: current_indices (:class:`List[int]`) - The indices pointing to the current cell in the tensor. It provides one index
+            along each axis of ``shape``.
+        """
+        dimension_count = np.product(shape)
+        current_indices = [0] * len(shape)
+        yield current_indices
+        directions = [1] * len(shape)
+        for d in range(dimension_count):
+            # Increment index counter (with carry on to next axes if needed)
+            for s in range(len(shape)-1,-1,-1): 
+                if CheckerBoard.is_end_of_axis(index=current_indices[s], limit=shape[s], direction=directions[s]):
+                    directions[s] = -directions[s]
+                else:
+                    current_indices[s] += directions[s]
+                    break
+
+            yield current_indices
+
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+
+        # Set up permutation vector
+        dimension_count = np.product(shape)
+        tensor = np.reshape(np.arange(dimension_count), shape)
+        rope_values = [None] * dimension_count
+        
+        # Unravel tensor
+        rope_index_generator = CheckerBoard.generate_rope_indices(shape=shape)
+        for d in range(dimension_count): rope_values[d] = tensor[tuple(next(rope_index_generator))]
+
+        # Swop every two adjacent values
+        for d in range(0, 2*(dimension_count//2), 2):
+            tmp = rope_values[d]
+            rope_values[d] = rope_values[d+1]
+            rope_values[d+1] = tmp
+
+        # Ravel tensor
+        rope_index_generator = CheckerBoard.generate_rope_indices(shape=shape)
+        for d in range(dimension_count): tensor[tuple(next(rope_index_generator))] = rope_values[d]
+
+        # Flattened tensor now gives permutation
+        permutation = list(np.reshape(tensor, [-1]))
+
+        # Super
+        super(CheckerBoard, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+    
+class Coupling(FlowLayer, ABC):
+    r"""This layer couples the input :math:`x` with itself inside the method :py:meth:`call` by implementing the following formulae:
+    
+    .. math::
+        :nowrap:
+
+        \begin{eqnarray}
+            x_1 & = w * x \\
+            x_2 & = (1-w) * x \\
+            y_1 & = x_1 \\
+            y_2 & = f(x_2, g(x_1)) \\
+            y   & = y_1 + y_2,
+        \end{eqnarray}
+
+    with ``mask`` :math:`w`, function :py:meth:`compute_coupling_parameters` :math:`g` and coupling law :math:`f`. As can be seen 
+    from the formula, the ``mask`` :math:`w` is used to select half of the input :math:`x` in :math:`x_1` and the other half in 
+    :math:`x_2`. While :math:`y_1` is set equal to :math:`x_1`, the main contribution of this layer is in the computation of 
+    :math:`y_2`. That is, the coupling law :math:`f` computes :math:`y_2` as a trivial combination, e.g. sum or product of :math:`x_2` 
+    and coupling parameters :math:`g(x_1)`. The function :math:`g` is a model of arbitrary complexity and it is thus possible to 
+    create non-linear mappings from :math:`x` to :math:`y`. The coupling law :math:`f` is chosen by this layer to be trivially 
+    invertible and to have tractable Jacobian determinant which ensures that the overall layer also has these two properties.
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`.
+    :type axes: List[int]
+    :param compute_coupling_parameters: See the placeholder member :py:meth:`compute_coupling_parameters` for a detailed description 
+        of requirements.
     :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
     :param mask: The mask used to select one half of the data while discarding the other half.
     :type mask: :class:`gyoza.modelling.masks.Mask`
     
     References:
 
-        - "NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh and David Krueger and Yoshua Bengio.
-        - "Density estimation using real nvp" by Laurent Dinh, Jascha Sohl-Dickstein and Samy Bengio.
+        - `"NICE: NON-LINEAR INDEPENDENT COMPONENTS ESTIMATION" by Laurent Dinh and David Krueger and Yoshua Bengio. <https://arxiv.org/abs/1410.8516>`_
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask, **kwargs):
 
         # Super
-        super(Coupling, self).__init__(shape=shape, axes=axes)
+        super(Coupling, self).__init__(shape=shape, axes=axes, **kwargs)
 
         # Input validity
         shape_message = f"The shape ({shape}) provided to the coupling layer and that provided to the mask ({mask.__mask__.shape}) are expected to be the same."
-        assert len(shape) == len(mask.__mask__.shape), shape_message
+        assert len(shape) == len(mask.__shape__), shape_message
         for i in range(len(shape)):
-            assert shape[i] == mask.__mask__.shape[i], shape_message
+            assert shape[i] == mask.__shape__[i], shape_message
 
         axes_message = f"The axes ({axes}) provided to the coupling layer and that provided to the mask ({mask.__axes__}) are expected to be the same."
         assert len(axes) == len(mask.__axes__), axes_message
         for i in range(len(axes)):
-            assert axes[i] == mask.__axes__[i], axese_message
+            assert axes[i] == mask.__axes__[i], axes_message
 
         # Attributes
         self.__compute_coupling_parameters__ = compute_coupling_parameters
@@ -231,6 +415,7 @@ class Coupling(FlowLayer, ABC):
         # Outputs
         return y_hat
     
+    @abc.abstractmethod
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function implements an invertible coupling for inputs ``x`` and ``parameters``.
         
@@ -243,6 +428,7 @@ class Coupling(FlowLayer, ABC):
 
         raise NotImplementedError()
     
+    @abc.abstractmethod
     def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         """This function is the inverse of :py:meth:`__couple__`.
         
@@ -275,12 +461,18 @@ class Coupling(FlowLayer, ABC):
         return x
     
 class AdditiveCoupling(Coupling):
-    """This coupling layer implements an additive coupling of the form y = x + parameters"""
+    """This coupling layer implements an additive coupling law of the form :math:`f(x_2, c(x_1) = x_2 + c(x_1)`. For details on the
+    encapsulating theory refer to :class:`Coupling`.
+    
+    References:
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
         
         # Super
-        super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
 
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
         
@@ -300,21 +492,27 @@ class AdditiveCoupling(Coupling):
     
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
-        # Copmute
+        # Compute
         batch_size = x.shape[0]
-        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.float32)
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
         # Outputs
         return logarithmic_determinant
 
 class AffineCoupling(Coupling):
-    """This coupling layer implements an affine coupling of the form y = scale * x + location, where scale = exp(parameters[0])
-    and location = parameters[1]. To prevent division by zero during decoupling, the exponent of parameters[0] is used as scale."""
+    """This coupling layer implements an affine coupling law of the form :math:`f(x_2, c(x_1) = e^s x_2 + t`, where :math:`s, t = c(x)`. 
+    To prevent division by zero during decoupling, the exponent of :math:`s` is used as scale. For details on the encapsulating 
+    theory refer to :class:`Coupling`. 
+    
+    References:
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor):
+        - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
         
         # Super
-        super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
 
     @staticmethod
     def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
@@ -367,13 +565,13 @@ class AffineCoupling(Coupling):
         return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
-    """A trainable location and scale transformation of the data. For each unit of the specified input shape, a scale and a location 
-    parameter is used. That is, if shape = [width, height] then 2 * width * height many parameters are used. Each pair of location and
-    scale is initialized to produce mean equal to 0 and variance equal to 1 for its unit. To allow for invertibility, the scale parameter 
-    has to be non-zero and is therefore chosen to be on an exponential scale. Each unit thus has the following activation 
+    """A trainable location and scale transformation of the data. For each dimension of the specified input shape, a scale and a location 
+    parameter is used. That is, if shape == [width, height], then 2 * width * height many parameters are used. Each pair of location and
+    scale is initialized to produce mean equal to 0 and variance equal to 1 for its dimension. To allow for invertibility, the scale parameter 
+    has to be non-zero and is therefore chosen to be on an exponential scale. Each dimension thus has the following activation 
     normalization:
     
-    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this unit, respectively.
+    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this dimension, respectively.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -382,20 +580,20 @@ class ActivationNormalization(FlowLayer):
     
     References:
 
-    - "Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal
-    - "A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer
+    - `"Glow: Generative Flow with Invertible 1x1 Convolutions" by Diederik P. Kingma and Prafulla Dhariwal. <https://arxiv.org/abs/1807.03039>`_
+    - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer. <https://arxiv.org/abs/2004.13166>`_
     """
     
-    def __init__(self, shape: List[int], axes: List[int]):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
         # Super
         super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__location__ = tf.Variable(tf.zeros(shape), trainable=True, name="__location__")
+        self.__location__ = tf.Variable(tf.zeros(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__location__")
         """The value by which each data point shall be translated."""
 
-        self.__scale__ = tf.Variable(tf.ones(shape), trainable=True, name="__scale__")
+        self.__scale__ = tf.Variable(tf.ones(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__scale__")
         """The value by which each data point shall be scaled."""
 
         self.__is_initialized__ = False
@@ -412,16 +610,18 @@ class ActivationNormalization(FlowLayer):
 
         # Flatten other axes
         other_axes = list(range(len(x.shape)))[:-len(self.__axes__)]
-        x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes] + self.__shape__
+        x = utt.flatten_along_axes(x=x, axes=other_axes) # Shape == [product of all other axes, *self.__shape__]
 
         # Compute mean and standard deviation 
         mean = tf.stop_gradient(tf.math.reduce_mean(x, axis=0)) # Shape == self.__shape__ 
         standard_deviation = tf.stop_gradient(tf.math.reduce_std(x, axis=0)) # Shape == self.__shape__ 
         
-        # Update attributes
+        # Update attributes first call will have standardizing effect
         self.__location__.assign(mean)
-        scale = tf.math.log(standard_deviation+1e-16) # To initialze it for unit variance we need to use log here
-        self.__scale__.assign(scale)
+        self.__scale__.assign(tf.math.log(standard_deviation))
+
+        # Update initialization state
+        self.__is_initialized__ = True
 
     def __prepare_variables_for_computation__(self, x:tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
         """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
@@ -437,6 +637,7 @@ class ActivationNormalization(FlowLayer):
         for axis in self.__axes__: axes.remove(axis)
         location = utt.expand_axes(x=self.__location__, axes=axes)
         scale = utt.expand_axes(x=self.__scale__, axes=axes)
+        scale = tf.math.exp(scale) # This is to prevent division by zero in call and to simplify the Jacobian determinant
 
         # Outputs
         return location, scale
@@ -448,7 +649,7 @@ class ActivationNormalization(FlowLayer):
 
         # Transform
         location, scale = self.__prepare_variables_for_computation__(x=x)
-        y_hat = (x-location) / (tf.math.exp(scale))
+        y_hat = (x - location) / scale
 
         # Outputs
         return y_hat
@@ -456,28 +657,149 @@ class ActivationNormalization(FlowLayer):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
 
         # Transform
-        scale, location = self.__prepare_variables_for_computation__(x=y_hat)
-        x = tf.math.exp(scale) * y_hat + location
+        location, scale = self.__prepare_variables_for_computation__(x=y_hat)
+        x =  y_hat * scale + location
 
         # Outputs
         return x
            
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
-        # Count elements per instance 
+        # Count dimensions over remaining axes (for a single instance)
         batch_size = x.shape[0]
-        unit_count = 1
+        dimension_count = 1
         for axis in range(1,len(x.shape)):
             if axis not in self.__axes__:
-                unit_count *= x.shape[axis] 
+                dimension_count *= x.shape[axis] 
         
         # Compute logarithmic determinant
-        # By defintion: sum across units for ln(1/scale), where scale = exp(self.__scale__)
-        # Rewriting to: sum across units for ln(0) - ln(scale)
-        # Rewriting to: -1 * sum across units for ln(scale)
-        # rewriting to -1 sum across units for ln(exp(self.__scale__)) which result in:
-        logarithmic_determinant = -1 * unit_count * tf.math.reduce_sum(self.__scale__) # All channel for a single unit 
-        logarithmic_determinant = tf.ones(shape=[batch_size]) * logarithmic_determinant
+        # By defintion: sum across dimensions for ln(scale), where scale = exp(self.__scale__)
+        # rewriting to: sum across dimensions for ln(exp(self.__scale__)) which results in:
+        logarithmic_determinant = - dimension_count * tf.math.reduce_sum(self.__scale__) # single instance 
+        logarithmic_determinant = tf.ones(shape=[batch_size], dtype=tf.keras.backend.floatx()) * logarithmic_determinant
+
+        # Outputs
+        return logarithmic_determinant
+
+class Reflection(FlowLayer):
+    """This layer reflects a data point around ``reflection_count`` learnable normals using the `Householder transform 
+    <https://en.wikipedia.org/wiki/Householder_transformation>`_. In this context, the normal is the unit length vector orthogonal to
+    the hyperplane of reflection. When ``axes`` contains more than a single entry, the input is first flattened along these axes, 
+    then reflected and then unflattened to original shape.
+
+    :param shape: See base class :class:`FlowLayer`.
+    :type shape: List[int]
+    :param axes: See base class :class:`FlowLayer`. **IMPORTANT**: These axes are distinct from the learnable reflection axes.
+    :type axes: List[int]
+    :param reflection_count: The number of successive reflections that shall be executed. Expected to be at least 1.
+    :type reflection_count: int
+
+    Referenes:
+
+        - `"Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon <https://arxiv.org/abs/2003.01941>`_
+    """
+
+    def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs):
+        # Input validity
+        assert 1 <= reflection_count, f'The input reflection_count was expected to be at least 1 but found to be {reflection_count}.'
+        
+        # Super
+        super(Reflection, self).__init__(shape=shape, axes=axes, **kwargs)
+
+        # Attributes
+        dimension_count = tf.reduce_prod(shape).numpy()
+        reflection_normals = tf.math.l2_normalize(tf.random.uniform(shape=[reflection_count, dimension_count], dtype=tf.keras.backend.floatx()), axis=1) 
+        
+        self.__reflection_normals__ = tf.Variable(reflection_normals, trainable=True, name="reflection_normals") # name is needed for getting and setting weights
+        """(:class:`tensorflow.Tensor`) - These are the axes along which an instance is reflected. Shape == [reflection count, dimension count] where dimension count is the product of the shape of the input instance along :py:attr:`self.__axes__`."""
+
+        self.__inverse_mode__ = False
+        "(bool) - Indicates whether the reflections shall be executed in reversed order (True) or forward order (False)."
+
+
+    def __reflect__(self, x: tf.Tensor) -> tf.Tensor:
+        """This function executes all the reflections of self in a sequence by multiplying ``x`` with the corresponding Householder 
+            matrices that are constructed from :py:attr:`__reflection_normals__`. This method provides the backward reflection if 
+            :py:attr:`self.__inverse_mode` == True and forward otherwise.
+
+        :param x: The flattened data of shape [..., dimension count], where dimension count is the product of the :py:attr:`__shape__` as 
+            specified during initialization of self. It is assumed that all axes except for :py:attr:`__axes__` (again, see 
+            initialization of self) are moved to ... in the aforementioned shape of ``x``.
+        :type x: :class:`tensorfflow.Tensor`
+        :return: x_new (:class:`tensorfflow.Tensor`) - The rotated version of ``x`` with same shape.
+        """
+
+        # Convenience variables
+        reflection_count = self.__reflection_normals__.shape[0]
+        dimension_count = self.__reflection_normals__.shape[1]
+
+        # Ensure reflection normal is of unit length 
+        self.__reflection_normals__.assign(tf.math.l2_normalize(self.__reflection_normals__, axis=1))
+
+        # Pass x through the sequence of reflections
+        x_new = x
+        indices = list(range(reflection_count))
+        if self.__inverse_mode__: 
+            # Note: Householder reflections are involutory (their own inverse) https://en.wikipedia.org/wiki/Householder_transformation
+            # One can thus invert a sequence of refelctions by reversing the order of the individual reflections
+            indices.reverse()
+
+        for r in indices:
+            v_r = self.__reflection_normals__[r][:, tf.newaxis] # Shape == [dimension count, 1]
+            R = tf.eye(dimension_count, dtype=tf.keras.backend.floatx()) - 2.0 * v_r * tf.transpose(v_r, conjugate=True)
+            x_new = tf.linalg.matvec(R, x_new)
+
+        # Outputs
+        return x_new
+    
+    def call(self, x: tf.Tensor) -> tf.Tensor:
+        
+        # Initialize
+        old_shape = cp.copy(x.shape)
+
+        # Flatten along self.__axes__ to fit reflection matrix
+        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+
+        # Move this flat axis to the end for multiplication with reflection matrices
+        x = utt.move_axis(x=x, from_index=self.__axes__[0], to_index=-1)
+
+        # Reflect
+        y_hat = self.__reflect__(x=x)
+
+        # Move axis back to where it came from
+        y_hat = utt.move_axis(x=y_hat, from_index=-1, to_index=self.__axes__[0])
+
+        # Unflatten to restore original shape
+        y_hat = tf.reshape(y_hat, shape=old_shape)
+        
+        # Outputs
+        return y_hat
+    
+    def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
+        
+        # Prepare self for inversion
+        previous_mode = self.__inverse_mode__
+        self.__inverse_mode__ = True
+
+        # Call forward method (will now function as inverter)
+        x = self(x=y_hat)
+
+        # Undo the setting of self to restore the method's precondition
+        self.__inverse_mode__ = previous_mode
+
+        # Outputs
+        return x
+    
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
+        
+        # It is known that Householder reflections have a determinant of -1 https://math.stackexchange.com/questions/504199/prove-that-the-determinant-of-a-householder-matrix-is-1
+        # It is also known that det(AB) = det(A) det(B) https://proofwiki.org/wiki/Determinant_of_Matrix_Product
+        # This layer applies succesive reflections as matrix multiplications and thus the determinant of the overall transformation is
+        # -1 or 1, depending on whether an even or odd number of reflections are concatenated. Yet on logarithmic scale it is always 0.
+        
+        # Compute
+        batch_size = x.shape[0]
+        logarithmic_determinant = tf.zeros([batch_size], dtype=tf.keras.backend.floatx())
 
         # Outputs
         return logarithmic_determinant
@@ -489,23 +811,16 @@ class SequentialFlowNetwork(FlowLayer):
     :type sequence: List[:class:`FlowLayer`]
     """
 
-    def __init__(self, sequence: List[FlowLayer]):
+    def __init__(self, sequence: List[FlowLayer], **kwargs):
         
         # Super
-        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[]) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
+        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[], **kwargs) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
         
         # Attributes
         self.sequence = sequence
+        self.loss_tracker = tf.keras.metrics.Mean(name="loss")
+        self.mae_metric = tf.keras.metrics.MeanAbsoluteError(name="mae")
 
-    def get_config(self):
-
-        # Construct
-        config = super().get_config()
-        config['sequence'] = self.sequence
-        
-        # Outputs
-        return config
-    
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
         # Transform
@@ -518,7 +833,7 @@ class SequentialFlowNetwork(FlowLayer):
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         
         # Transform
-        for layer in self.sequence: y_hat = layer.inverse(x=y_hat)
+        for layer in reversed(self.sequence): y_hat = layer.invert(y_hat=y_hat)
         x = y_hat
 
         # Outputs
@@ -535,26 +850,44 @@ class SequentialFlowNetwork(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
-if __name__ == "__main__":
-    import matplotlib.pyplot as plt
-    from gyoza.utilities import math as gum
+class SupervisedFactorNetwork(SequentialFlowNetwork):
 
-    # Generate some data
-    instance_count = 100
-    x, y = np.meshgrid(np.arange(start=-1, stop=1, step=0.1), np.arange(start=-1, stop=1, step=0.1))
-    x = np.reshape(x,[-1,]); y = np.reshape(y, [-1])
-    x, y = gum.swirl(x=x,y=y)
-    x = tf.transpose([x,y], [1,0]); del y
-    labels = ([0] * (len(x)//2)) + ([1] * (len(x)//2))
-    
-    # Further transformation
-    #shuffle = Shuffle(channel_count=2)
-    #basic_fully_connected = BasicFullyConnectedNet(latent_channel_count=2, output_channel_count=2, depth=2)
-    
-    #tmp = shuffle(x=x)
-    #y_hat = basic_fully_connected(x=tmp)
-    
-    # Visualization
-    plt.figure()
-    plt.scatter(x[:,0],x[:,1],c=labels)
-    plt.show()
+    def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
+        super().__init__(sequence=sequence, **kwargs)
+        self.__loss__ = mls.SupervisedFactorLoss(dimensions_per_factor=dimensions_per_factor)
+
+    def train_step(self, data):
+        """_summary_
+
+        :param data: A tuple containg the batch of X and y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
+            2, ...] where 2 indicates the pair x_a, x_b of same factor and ... is the shape of one input instance that has to fit 
+            through :py:attr:`self.sequence`. The tensorflow.Tensor y shall contain the factor indices of shape [batch size].
+        :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
+        :return: metrics (Dict[str:tensroflow.keras.metrics.Metric]) - A dictionary of training metrics.
+        """
+        
+        # Unpack inputs
+        X, y = data
+        z_a = X[:,0,:]; z_b = X[:,1,:]
+        
+        with tf.GradientTape() as tape:
+            # First instance
+            z_tilde_a = self(z_a, training=True)  # Forward pass
+            j_a = self.compute_jacobian_determinant(x=z_a)
+            
+            # Second instance
+            z_tilde_b = self(z_b, training=True)
+            j_b = self.compute_jacobian_determinant(x=z_b)
+            
+            # Compute loss
+            loss = self.__loss__.compute(y_true=y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
+        # Outputs
+        return loss

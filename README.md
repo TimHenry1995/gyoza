@@ -14,7 +14,7 @@ Detailed documentation can be found on the companion website of [read-the-docs](
 Developers can access the package via [GitHub](https://github.com/TimHenry1995/gyoza)
 
 ## Tutorial
-Tutorials can be found in the [tutorials](https://github.com/TimHenry1995/gyoza/tree/main/tutorials) folder of this repository.
+Tutorials can be found in the [tutorials](https://github.com/TimHenry1995/gyoza/tree/main/tutorials) folder of the Github repository.
 
 ### Creating Models
 Flow models can be created in the same way as [tensorflow models](https://keras.io/api/models/model/). Consider the following example

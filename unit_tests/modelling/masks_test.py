@@ -72,6 +72,83 @@ class TestHeaviside(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
+    def test_mask_three_axes_axes_1_2(self):
+        """Tests whether the mask function of Heaviside works on a three axes input along axes 1 and 2."""
+
+        # Initialize
+        x = tf.reshape(tf.range(30, dtype=tf.keras.backend.floatx()), shape=[2,3,5])
+
+        # Target
+        x_target = tf.constant([[[0,0,0,0,0],[0,0,7,8,9],[10,11,12,13,14]],
+                                [[0,0,0,0,0],[0,0,22,23,24],[25,26,27,28,29]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        instance = mms.Heaviside(axes=[1,2], shape=[3,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_mask_three_axes_axes_0_2(self):
+        """Tests whether the mask function of Heaviside works on a three axes input along axes 0 and 2."""
+
+        # Initialize
+        x = tf.reshape(tf.range(30, dtype=tf.keras.backend.floatx()), shape=[2,3,5])
+
+        # Target
+        x_target = tf.constant([[[0,0,0,0,0],[0,0,0,0,0],[0,0,0,0,0]],
+                                [[15,16,17,18,19],[20,21,22,23,24],[25,26,27,28,29]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        instance = mms.Heaviside(axes=[0,2], shape=[2,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_mask_four_axes_axes_2_3(self):
+        """Tests whether the mask function of Heaviside works on a four axes input along axes 2 and 3."""
+
+        # Initialize
+        x = tf.reshape(tf.range(120, dtype=tf.keras.backend.floatx()), shape=[2,3,4,5])
+
+        # Target
+        x_target = tf.constant([[[[0]*5, [0]*5, list(range(10,15)), list(range(15,20))],
+                                [[0]*5, [0]*5, list(range(30,35)), list(range(35,40))],
+                                [[0]*5, [0]*5, list(range(50,55)), list(range(55,60))]],
+
+                                [[[0]*5, [0]*5, list(range(70,75)), list(range(75,80))],
+                                [[0]*5, [0]*5, list(range(90,95)), list(range(95,100))],
+                                [[0]*5, [0]*5, list(range(110,115)), list(range(115,120))]]], dtype=tf.keras.backend.floatx())
+
+        # Observe
+        instance = mms.Heaviside(axes=[2,3], shape=[4,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_mask_four_axes_axes_1_2_3(self):
+        """Tests whether the mask function of Heaviside works on a four axes input along axes 1, 2 and 3."""
+
+        # Initialize
+        x = tf.reshape(tf.range(120, dtype=tf.keras.backend.floatx()), shape=[2,3,4,5])
+
+        # Target
+        x_target = tf.concat([tf.reshape(tf.concat([tf.zeros([30]),tf.range(30.0,60.0)], axis=0),[1,3,4,5]),
+                              tf.reshape(tf.concat([tf.zeros([30]),tf.range(90.0,120.0)], axis=0),[1,3,4,5])], axis=0)
+        
+        # Observe
+        instance = mms.Heaviside(axes=[1,2,3], shape=[3,4,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
     def test_mask_two_axes_axis_1_negative(self):
         """Tests whether the mask function of Heaviside works on a two axes input along axis 1
         with a negative mask."""
@@ -237,6 +314,93 @@ class TestCheckerBoard(unittest.TestCase):
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
 
+    def test_mask_two_axes_axes_0_1(self):
+        """Tests whether the mask method of CheckerBoard works on a two axes input along axes 0 and 1."""
+
+        # Initialize
+        x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
+
+        # Target
+        x_target = x.numpy()
+        x_target[0,::2] = 0
+        x_target[1,1::2] = 0
+        x_target[2,::2] = 0
+        x_target = tf.constant(x_target)
+
+        # Observe
+        instance = mms.CheckerBoard(axes=[0,1], shape=[3,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_mask_three_axes_axes_1_2(self):
+        """Tests whether the mask method of CheckerBoard works on a three axes input along axes 1 and 2."""
+
+        # Initialize
+        x = tf.reshape(tf.range(30, dtype=tf.keras.backend.floatx()), shape=[2,3,5])
+
+        # Target
+        x_target = x.numpy()
+        x_target[:,0,::2] = 0
+        x_target[:,1,1::2] = 0
+        x_target[:,2,::2] = 0
+        x_target = tf.constant(x_target)
+
+        # Observe
+        instance = mms.CheckerBoard(axes=[1,2], shape=[3,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_mask_four_axes_axes_1_2(self):
+        """Tests whether the mask method of CheckerBoard works on a four axes input along axes 1 and 2."""
+
+        # Initialize
+        x = tf.reshape(tf.range(60, dtype=tf.keras.backend.floatx()), shape=[2,3,5,2])
+
+        # Target
+        x_target = x.numpy()
+        x_target[:,0,::2,:] = 0
+        x_target[:,1,1::2,:] = 0
+        x_target[:,2,::2,:] = 0
+        x_target = tf.constant(x_target)
+
+        # Observe
+        instance = mms.CheckerBoard(axes=[1,2], shape=[3,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
+    def test_mask_four_axes_axes_1_2_3(self):
+        """Tests whether the mask method of CheckerBoard works on a four axes input along axes 1, 2 and 3."""
+
+        # Initialize
+        x = tf.reshape(tf.range(120, dtype=tf.keras.backend.floatx()), shape=[2,3,4,5])
+
+        # Target
+        x_target = x.numpy()
+        x_target[:,0,::2,::2] = 0
+        x_target[:,0,1::2,1::2] = 0
+        x_target[:,1,1::2,::2] = 0
+        x_target[:,1,::2,1::2] = 0
+        x_target[:,2,::2,::2] = 0
+        x_target[:,2,1::2,1::2] = 0
+        x_target = tf.constant(x_target)
+
+        # Observe
+        instance = mms.CheckerBoard(axes=[1,2,3], shape=[3,4,5])
+        x_observed = instance.call(x=x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
+
     def test_arrange_one_axis_odd(self):
         """Tests whether the arrange method of CheckerBoard works on a 1 axis input of odd length."""
 
@@ -334,69 +498,6 @@ class TestCheckerBoard(unittest.TestCase):
         # Observe
         instance = mms.CheckerBoard(axes=[1], shape=[5])
         x_observed = instance.re_arrange(x_new=x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
-
-    def test_mask_two_axes_axes_0_1(self):
-        """Tests whether the mask method of CheckerBoard works on a two axes input along axes 0 and 1."""
-
-        # Initialize
-        x = tf.reshape(tf.range(15, dtype=tf.keras.backend.floatx()), shape=[3,5])
-
-        # Target
-        x_target = x.numpy()
-        x_target[0,::2] = 0
-        x_target[1,1::2] = 0
-        x_target[2,::2] = 0
-        x_target = tf.constant(x_target)
-
-        # Observe
-        instance = mms.CheckerBoard(axes=[0,1], shape=[3,5])
-        x_observed = instance.call(x=x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
-
-    def test_mask_three_axes_axes_1_2(self):
-        """Tests whether the mask method of CheckerBoard works on a three axes input along axes 1 and 2."""
-
-        # Initialize
-        x = tf.reshape(tf.range(30, dtype=tf.keras.backend.floatx()), shape=[2,3,5])
-
-        # Target
-        x_target = x.numpy()
-        x_target[:,0,::2] = 0
-        x_target[:,1,1::2] = 0
-        x_target[:,2,::2] = 0
-        x_target = tf.constant(x_target)
-
-        # Observe
-        instance = mms.CheckerBoard(axes=[1,2], shape=[3,5])
-        x_observed = instance.call(x=x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertEqual(first=tf.reduce_sum((x_target-x_observed)**2).numpy(), second=0)
-
-    def test_mask_four_axes_axes_1_2(self):
-        """Tests whether the mask method of CheckerBoard works on a three axes input along axes 1 and 2."""
-
-        # Initialize
-        x = tf.reshape(tf.range(60, dtype=tf.keras.backend.floatx()), shape=[2,3,5,2])
-
-        # Target
-        x_target = x.numpy()
-        x_target[:,0,::2,:] = 0
-        x_target[:,1,1::2,:] = 0
-        x_target[:,2,::2,:] = 0
-        x_target = tf.constant(x_target)
-
-        # Observe
-        instance = mms.CheckerBoard(axes=[1,2], shape=[3,5])
-        x_observed = instance.call(x=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -552,4 +653,4 @@ class TestCheckerBoard(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestCheckerBoard.test_mask_two_axes_axes_0_1(None)
+    TestHeaviside.test_mask_four_axes_axes_1_2_3(None)

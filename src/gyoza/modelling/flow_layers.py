@@ -911,7 +911,12 @@ class SequentialFlowNetwork(FlowLayer):
         return logarithmic_determinant
 
 class SupervisedFactorNetwork(SequentialFlowNetwork):
-
+    """This network is a :class:`SequentialFlowNetwork` that can be used to disentangle factors, e.g. to understand representations
+    in latent spaces of regular neural networks. It automatically uses the :class:`losses.SupervisedFactorLoss` to compute its losses.
+    It also overrides the :class:`FlowLayer`'s implementation for train_step to accomodate for the fact that calibration does not
+    simply use single instances but pairs of instances and their similarity.
+    """
+    
     def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
         self.loss = mls.SupervisedFactorLoss(dimensions_per_factor=dimensions_per_factor)

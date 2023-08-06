@@ -13,7 +13,7 @@ for x in os.walk('..'):
 for x in os.walk(os.path.join("..","..")):
   sys.path.insert(0, x[0])
 
-update the version in conf.py of docs
+update the version in conf.py of docs and update version number in pyproject.toml 
 ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.todo','sphinx.ext.viewcode','sphinx.ext.autodoc']
 
 cd to docs directory, run make html
@@ -21,7 +21,7 @@ cd to docs directory, run make html
 upload to github
 
 Uploading to pypi
-update version number in pyproject.toml 
+
 and include all new libraries in pyproject.toml (same as in requirements)
 pip install -e .
 python -m build

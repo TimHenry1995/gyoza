@@ -161,7 +161,7 @@ class Heaviside(Mask):
         # Set up mask
         mask = np.ones(shape=shape)
         mask = np.reshape(mask, [-1]) # Flattening
-        mask[:shape[0] // 2] = 0
+        mask[:mask.shape[0] // 2] = 0
         mask = tf.constant(mask) 
 
         # Super

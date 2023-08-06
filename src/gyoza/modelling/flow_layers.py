@@ -52,23 +52,50 @@ class FlowLayer(tf.keras.Model, ABC):
         self.__axes__ = cp.copy(axes)
         """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
-    def fit(self, iterator: tf.keras.utils.Sequence, epoch_count: int, batch_count) -> tf.Tensor:
-        """Fits self to data. Assumes that the model is compiled with loss and an optimizer and has a train_step implementation.
+    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: tf.keras.utils.Sequence=None) -> tf.Tensor:
+        """Fits self to data. Assumes that the model is compiled with loss and an optimizer. Unless overwritten by the subclass, this fit
+        method relies on a train_step method that passes an X batch through the model, flattens its output and after flattening the
+        Y batch, computes the loss to apply gradient descent. If ``X``, ``Y``, ``batch_size`` are specified, then no iterator is needed. 
+        Instead an iterator is created that samples ``batch_size`` instances from X and Y uniformly at random. Alternatively, ``X``, 
+        ``Y`` and ``batch_size`` can be omitted if an iterator is provided. 
 
-        :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...]. 
-        :type iterator: :class:`tf.keras.utils.Sequential`
         :param epoch_count: The number of times self shall be calibrated on `iterator`. 
         :type epoch_count: int
-        :param batch_count: The number of times a new batch shall be drawn from the `iterator`. 
+        :param batch_count: The number of times a new batch shall be drawn from the `iterator` per epoch. 
         :type batch_count: int
+        :param X: Input data to be fed through the network. Shape is assumed to be [instance count, ...], where ... needs to be 
+            compatible with the network.
+        :type X: :class:`tensorflow.Tensor`, optional
+        :param Y: Expected output data to be obtained after feeding ``X`` through the network. Shape is assumed to be [instance count, 
+            ...], where ... needs to be compatible with the network and indexing is assumed to be synchronous with ``X``.
+        :type Y: :class:`tensorflow.Tensor`, optional
+        :param batch_size: The number of instance that shall be sampled per batch.
+        :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...], where ... needs to be compatible with the 
+            network. 
+        :type iterator: :class:`tf.keras.utils.Sequential`
         :return: 
             - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
-            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
+            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == 
+                [``epoch_count``].
         """
         
+        # Input validity
+        if type(X) != type(None) or type(Y) != type(None) or type(batch_size) != type(None):
+            assert type(X) != type(None) and type(Y) != type(None) and type(batch_size) != type(None) and type(iterator) == type(None), f"If X, Y or batch size are provided, then all need to be provided while iterator shall be none. "
+        else:
+            assert type(iterator) != type(None), f"If neither X, Y, nor batch_size are specified, then an iterator must be provided."
+
+        # Initialization
         epoch_loss_means = [None] * epoch_count
         epoch_loss_standard_deviations = [None] * epoch_count
         batch_losses = [None] * batch_count
+        if type(iterator) == type(None):
+            def iterate(X,Y, batch_size):
+                instance_count = X.shape[0]
+                while True:
+                    indices = np.random.randint(0,instance_count,size=[batch_size])
+                    yield X[indices], Y[indices]
+            iterator = iterate(X=X, Y=Y, batch_size=batch_size)
         
         # Iterate epochs
         for e in range(epoch_count):
@@ -80,6 +107,40 @@ class FlowLayer(tf.keras.Model, ABC):
 
         # Outputs
         return epoch_loss_means, epoch_loss_standard_deviations
+
+    def train_step(self, data):
+        """Performs one step of gradient descent. Assumes self.optimzer and self.loss are initialized.
+
+        :param data: A tuple containg the batch of X and Y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
+            ...] where ... is the shape of one input instance that has to fit through :py:attr:`self.sequence`. The tensorflow.Tensor
+            Y shall be of same shape of X.
+        :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
+        :return: loss: A scalar for the loss observed before applying the train step.
+        """
+        
+        # Unpack inputs
+        X, Y = data
+        
+        with tf.GradientTape() as tape:
+            # Predict
+            Y_hat = self(X, training=True)  # Forward pass
+            
+            # Flatten to apply loss (most keras losses expect flat inputs)
+            Y_flat = tf.reshape(Y, shape=[-1])
+            Y_hat_flat = tf.reshape(Y_hat, shape=[-1])
+            
+            # Compute loss
+            loss = self.loss(y_true=Y_flat, y_pred=Y_hat_flat)
+
+        # Compute gradients
+        trainable_vars = self.trainable_variables
+        gradients = tape.gradient(loss, trainable_vars)
+
+        # Update weights
+        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+
+        # Outputs
+        return loss
 
     @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:
@@ -818,8 +879,7 @@ class SequentialFlowNetwork(FlowLayer):
         
         # Attributes
         self.sequence = sequence
-        self.loss_tracker = tf.keras.metrics.Mean(name="loss")
-        self.mae_metric = tf.keras.metrics.MeanAbsoluteError(name="mae")
+        """(List[:class:`FlowLayer`]) - Stores the sequence of flow layers through which the data shall be passed."""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
@@ -851,23 +911,28 @@ class SequentialFlowNetwork(FlowLayer):
         return logarithmic_determinant
 
 class SupervisedFactorNetwork(SequentialFlowNetwork):
-
+    """This network is a :class:`SequentialFlowNetwork` that can be used to disentangle factors, e.g. to understand representations
+    in latent spaces of regular neural networks. It automatically uses the :class:`losses.SupervisedFactorLoss` to compute its losses.
+    It also overrides the :class:`FlowLayer`'s implementation for train_step to accomodate for the fact that calibration does not
+    simply use single instances but pairs of instances and their similarity.
+    """
+    
     def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
-        self.__loss__ = mls.SupervisedFactorLoss(dimensions_per_factor=dimensions_per_factor)
+        self.loss = mls.SupervisedFactorLoss(dimensions_per_factor=dimensions_per_factor)
 
     def train_step(self, data):
-        """_summary_
+        """Performs one step of gradient descent. Assumes self.optimzer and self.loss are initialized.
 
-        :param data: A tuple containg the batch of X and y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
+        :param data: A tuple containg the batch of X and Y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
             2, ...] where 2 indicates the pair x_a, x_b of same factor and ... is the shape of one input instance that has to fit 
-            through :py:attr:`self.sequence`. The tensorflow.Tensor y shall contain the factor indices of shape [batch size].
+            through :py:attr:`self.sequence`. The tensorflow.Tensor Y shall contain the factor indices of shape [batch size].
         :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
-        :return: metrics (Dict[str:tensroflow.keras.metrics.Metric]) - A dictionary of training metrics.
+        :return: loss: A scalar for the loss observed before applying the train step.
         """
         
         # Unpack inputs
-        X, y = data
+        X, Y = data
         z_a = X[:,0,:]; z_b = X[:,1,:]
         
         with tf.GradientTape() as tape:
@@ -880,7 +945,7 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
             j_b = self.compute_jacobian_determinant(x=z_b)
             
             # Compute loss
-            loss = self.__loss__.compute(y_true=y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
+            loss = self.loss.compute(y_true=Y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
 
         # Compute gradients
         trainable_vars = self.trainable_variables

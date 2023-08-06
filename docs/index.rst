@@ -9,7 +9,7 @@ Welcome to gyoza's documentation!
 This package can be used to build invertible artificial neural networks, also known as flow transformations.
 The below diagram illustrates the structure of modules and their classes. 
 
-.. image:: images/class_diagram.png
+.. image:: images/Class_Diagram.png
   :width: 600
   :alt: Here you should see a module diagram.
 

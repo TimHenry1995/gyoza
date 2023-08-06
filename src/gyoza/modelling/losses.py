@@ -6,7 +6,7 @@ import copy as cp
 class UnsupervisedFactorLoss():
     pass
 
-class SupervisedFactorLoss():
+class SupervisedFactorLoss(tf.keras.losses.Loss):
     r"""
     This loss can be used to incentivize the entries of the output vector of a flow network to be arranged according to semantic 
     factors of the data with multivariate normal distribution. It implements the following formula:
@@ -66,7 +66,7 @@ class SupervisedFactorLoss():
         self.__dimensions_per_factor__ = cp.copy(dimensions_per_factor)
         """(:class:`List[int]`) - The number of dimensions per factor. Length equals factor count."""
 
-    def compute(self, y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
+    def call(self, y_true: tf.Tensor, y_pred: Tuple[tf.Tensor]) -> tf.Tensor:
         """Computes the loss.
         
         :param y_true: A matrix of shape [batch size, factor count], that indicates for each pair in the batch and each factor, to 
@@ -141,48 +141,3 @@ class SupervisedFactorLoss():
         
         # Outputs
         return loss
-
-def tf_cov(x):
-    mean_x = tf.reduce_sum(x, axis=0, keepdims=True) / tf.cast(tf.shape(x)[0], tf.keras.backend.floatx())
-    mx = tf.matmul(tf.transpose(mean_x), mean_x)
-    vx = tf.matmul(tf.transpose(x), x)/tf.cast(tf.shape(x)[0], tf.keras.backend.floatx())
-    cov_xx = vx - mx
-    return cov_xx
-
-"""
-    def forward(self, samples, logdets, factors=[0,0,1,1,1,2], global_step):
-        # eq 7
-        sample1 = samples["example1"]
-        logdet1 = logdets["example1"]
-        nll_loss1 = torch.mean(nll(torch.cat(sample1, dim=1)))
-        assert len(logdet1.shape) == 1
-        nlogdet_loss1 = -torch.mean(logdet1)
-        loss1 = nll_loss1 + nlogdet_loss1
-
-        # eq. 9
-        sample2 = samples["example2"]
-        logdet2 = logdets["example2"]
-        factor_mask = [ # same for all instances
-                torch.tensor(((factors==i) | ((factors<0) & (factors!=-i)))[:,None,None,None]).to(
-                    sample2[i]) for i in range(len(sample2))] # i iterates factors
-        factor_mask = [[1,1,0,0,0,0], # f0
-                       [0,0,1,1,1,0], # f1
-                       [0,0,0,0,0,1]] # f2
-        sample2_cond = [
-                sample2[i] - factor_mask[i]*self.rho*sample1[i]
-                for i in range(len(sample2))]
-        
-        nll_loss2 = [nll(sample2_cond[i]) for i in range(len(sample2_cond))]
-        nll_loss2 = [nll_loss2[i]/(1.0-factor_mask[i][:,0,0,0]*self.rho**2)
-                for i in range(len(sample2_cond))]
-
-        # eq 10
-        nll_loss2 = [torch.mean(nll_loss2[i]) # i is factor, mean is across instances
-                for i in range(len(sample2_cond))] # sample2_cond.shape == [factor count, ...]
-        nll_loss2 = sum(nll_loss2) # Sum across factors 
-        assert len(logdet2.shape) == 1
-        nlogdet_loss2 = -torch.mean(logdet2)
-        loss2 = nll_loss2 + nlogdet_loss2
-
-        loss = loss1 + loss2
-"""

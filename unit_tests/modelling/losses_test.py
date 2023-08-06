@@ -8,7 +8,7 @@ class TestSupervisedFactorLoss(unittest.TestCase):
         """Tests whether SupervisedFactorLoss can be initialized."""
 
         # Initialize
-        loss = mls.SupervisedFactorLoss(factor_dimension_counts=[1,2,3])
+        loss = mls.SupervisedFactorLoss(dimensions_per_factor=[1,2,3])
 
         # Target
         x_target = tf.constant([[1,0,0,0,0,0],[0,1,1,0,0,0],[0,0,0,1,1,1]], dtype=tf.keras.backend.floatx())
@@ -24,7 +24,7 @@ class TestSupervisedFactorLoss(unittest.TestCase):
         """Tests whether SupervisedFactorLoss can compute the loss."""
 
         # Initialize
-        loss = mls.SupervisedFactorLoss(factor_dimension_counts=[2,1,3])
+        loss = mls.SupervisedFactorLoss(dimensions_per_factor=[2,1,3])
         z_tilde_a = tf.constant([[3,6,8,4,6,2], [4,8,7,6,5,9], [6,8,5,6,3,2]], dtype=tf.keras.backend.floatx())
         z_tilde_b = tf.constant([[3,6,5,7,8,4], [9,7,8,5,7,4], [9,7,2,5,3,6]], dtype=tf.keras.backend.floatx())
         j_a = tf.constant([4,6,7], dtype=tf.keras.backend.floatx())
@@ -32,10 +32,10 @@ class TestSupervisedFactorLoss(unittest.TestCase):
         y_true = tf.constant([[0,1,0],[0,0,1],[1,0,1]], dtype=tf.keras.backend.floatx())
 
         # Target
-        x_target = tf.constant(367.92197, dtype=tf.keras.backend.floatx())
+        x_target = tf.constant(783512.5, dtype=tf.keras.backend.floatx())
 
         # Observe
-        x_observed = loss.compute(y_true=tf.constant(y_true), y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
+        x_observed = loss(y_true=tf.constant(y_true), y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))

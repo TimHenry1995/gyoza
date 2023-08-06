@@ -919,7 +919,8 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
     
     def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
-        self.loss = mls.SupervisedFactorLoss(dimensions_per_factor=dimensions_per_factor)
+        self.__dimensions_per_factor__ = cp.copy(dimensions_per_factor) 
+        """(List[int]) - A list that indicates for each factor (matched by index) how many dimensions are used."""
 
     def train_step(self, data):
         """Performs one step of gradient descent. Assumes self.optimzer and self.loss are initialized.
@@ -931,6 +932,10 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         :return: loss: A scalar for the loss observed before applying the train step.
         """
         
+        # Ensure loss exists
+        if not hasattr(self, "loss") or type(self.loss) != mls.SupervisedFactorLoss:
+            self.loss = mls.SupervisedFactorLoss(dimensions_per_factor=self.__dimensions_per_factor__)
+
         # Unpack inputs
         X, Y = data
         z_a = X[:,0,:]; z_b = X[:,1,:]
@@ -945,7 +950,7 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
             j_b = self.compute_jacobian_determinant(x=z_b)
             
             # Compute loss
-            loss = self.loss.compute(y_true=Y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
+            loss = self.loss(y_true=Y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
 
         # Compute gradients
         trainable_vars = self.trainable_variables

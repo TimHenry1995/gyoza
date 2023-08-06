@@ -19,9 +19,6 @@ ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.to
 cd to docs directory, run make html
 
 upload to github
-go to read the docs and build the documentation
-take the link to the new documentation and enter it into the readme
-push new readme to github
 
 Uploading to pypi
 update version number in pyproject.toml 

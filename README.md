@@ -1,6 +1,11 @@
 # Gyoza 
 ## A package for building normalizing flow models with artificial neural networks
 
+## Installation
+'''
+pip install gyoza
+'''
+
 ## Documentation
 Detailed documentation can be found on the companion website of [read-the-docs](https://gyoza.readthedocs.io/en/latest/)
 

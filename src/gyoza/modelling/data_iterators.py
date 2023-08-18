@@ -7,7 +7,7 @@ import random as rd
 from typing import Tuple, Callable
 
 class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
-    """This class provides functionality to iterates instances x_a of the data and finds for each of them an arbitrarily selected x_b 
+    """This class provides functionality to iterate instances x_a of the data and finds for each of them an arbitrarily selected x_b 
     such that they form a pair. The X outputs will be batches of such pairs while the Y outputs will be the corresponding batches of
     factor-wise label equality. That is, the Y_i for pair X_i will be a vector of length factor count indicating label equality with 1
     and inequality with zero. X thus has shape [``batch_size``, 2, * ``x_shape`` ] and Y has shape [``batch_size``, factor count].
@@ -16,7 +16,7 @@ class PersistentFactorizedPairIterator(tf.keras.utils.Sequence):
     :type data_path: str
     :param x_file_names: File names that identify input instances stored at ``data_path`` in .npy files (including file extension).
     :type x_file_names: List[str]
-    :param y_file_names: Files names to label vectors that correspond to the instances listed in ``x_file_names``. The vector shall
+    :param y_file_names: File names to label vectors that correspond to the instances listed in ``x_file_names``. The vector shall
         have factor count many entries whose integer value indicates the corresponding label along that factor. 
     :type y_file_names: List[str]
     :param x_shape: The shape of one x instance, e.g. [128,128,3] for an image.

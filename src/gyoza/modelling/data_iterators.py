@@ -7,7 +7,7 @@ import random as rd
 from typing import Tuple, Callable
 
 def persistent_factorized_pair_iterator(data_path: str, x_file_names: List[str], y_file_names: List[str], similarity_function: Callable, batch_size: int = 32) -> Tuple[tf.Tensor, tf.Tensor]:
-    """This iterator takes instances x_a of the data and finds for each of them an arbitrarily selected x_b such that they form a 
+    """This infinite iterator takes instances x_a of the data and finds for each of them an arbitrarily selected x_b such that they form a 
     pair. The X outputs will be batches of such pairs while the Y outputs will be the corresponding batches of factor-wise label 
     similarity. 
 
@@ -35,12 +35,11 @@ def persistent_factorized_pair_iterator(data_path: str, x_file_names: List[str],
 
     # Input validity
     assert len(x_file_names) == len(y_file_names), f"The inputs X_file_names and y_file_names were expected to have the same number of instances, yet have length {len(x_file_names)} and {len(y_file_names)}, respectively."
-    y_shape = np.load(os.path.join(data_path, x_file_names[0])).shape
-    assert len(y.shape) == 1, f"The y instances are expected to each be a vector of factor count many entries, but found y shape to be {y.shape}." 
+    y_shape = np.load(os.path.join(data_path, y_file_names[0])).shape
+    assert len(y_shape) == 1, f"The y instances are expected to each be a vector of factor count many entries, but found y shape to be {y_shape}." 
     
-
     # Convenience variables
-    instance_count = Y.shape[0]
+    instance_count = len(x_file_names)
     x_shape = np.load(os.path.join(data_path, x_file_names[0])).shape
     factor_count = y_shape[0]  
 
@@ -48,9 +47,8 @@ def persistent_factorized_pair_iterator(data_path: str, x_file_names: List[str],
 
         # Initialization
         X_ab = np.empty((batch_size, 2, *x_shape), dtype=tf.keras.backend.floatx())
-        factor_count = np.load(os.path.join(self.__data_path__, self.__y_file_names__[0])).shape[0]
-        Y_a = np.empty((self.batch_size, factor_count), dtype=float)
-        Y_b = np.empty((self.batch_size, factor_count), dtype=float)
+        Y_a = np.empty((batch_size, factor_count), dtype=float)
+        Y_b = np.empty((batch_size, factor_count), dtype=float)
 
         # Select indices for instances a and b
         a = np.random.randint(low=0, high=instance_count, size=batch_size)
@@ -64,14 +62,14 @@ def persistent_factorized_pair_iterator(data_path: str, x_file_names: List[str],
             X_ab[i,:] = np.concatenate([x_a[np.newaxis,:], x_b[np.newaxis,:]], axis=0) # Concatenate along pair axis
             
             # Y_i
-            y_a = np.load(os.path.join(data_path, y_file_names[x_a_index]))
-            y_b = np.load(os.path.join(data_path, y_file_names[x_b_index]))
+            y_a = np.load(os.path.join(data_path, y_file_names[a[i]]))
+            y_b = np.load(os.path.join(data_path, y_file_names[b[i]]))
             
             assert len(y_a.shape) == 1 and len(y_b.shape) == 1 and len(y_a) == factor_count and len(y_b) == factor_count, f"The y instances are expected to each have factor count many entries, but found y_a shape to be {y_a.shape} and y_b shape to be {y_b.shape}." 
             Y_a[i,:] = y_a
             Y_b[i,:] = y_b
 
-        Y_ab = similarity_function(Y[a,:], Y[b,:])
+        Y_ab = similarity_function(Y_a, Y_b)
         assert len(Y_ab.shape) >= 2 and Y_ab.shape[1] == factor_count, f"The similartity function is expected to provide an output of shape [instance count, factor count] but provided {Y_ab.shape}."
 
         # Ensure data type
@@ -82,7 +80,7 @@ def persistent_factorized_pair_iterator(data_path: str, x_file_names: List[str],
         yield X_ab, Y_ab 
 
 def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_function: Callable, batch_size: int) -> Tuple[tf.Tensor, tf.Tensor]:
-    """This iterator yields pairs of instances X_a and X_b along with their corresponding factorized similarity Y. Pairs are obtained 
+    """This infinite iterator yields pairs of instances X_a and X_b along with their corresponding factorized similarity Y. Pairs are obtained 
     by shuffling X once for X_a and once for X_b. It is thus possible that pair i has the same instance in X_a and X_b, yet unlikely 
     for large instance counts in X. The iterator produces a instance count many pairs, split into batches. The last batch may be 
     smaller than ``batch_size`` to reach that pair count.

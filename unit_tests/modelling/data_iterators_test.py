@@ -5,9 +5,8 @@ from typing import List, Tuple
 import os
 import numpy as np
 import shutil
-import random as rd
 
-class TestPairIterator(unittest.TestCase):
+class TestFactorizedPairIterators(unittest.TestCase):
     
     @staticmethod
     def create_temporary_files(n: int, x_shape: List[int], factor_count: int, folder_suffix: str) -> Tuple[str, List[str]]:
@@ -45,49 +44,39 @@ class TestPairIterator(unittest.TestCase):
         # Outputs
         return folder_path, x_file_names, y_file_names
 
-    def test_init(self):
-        """Tests whether PairIterator can be initialized."""
-
-        # Initialize
-        iterator = mdis.PersistentFactorizedPairIterator(data_path="", x_file_names=[], y_file_names=[], x_shape=[3,4], batch_size=4)
-        
-    def test_next(self):
-        """Tests whether PairIterator produces a sensible sequences of pair batches."""
+    def test_persistent_factorized_pair_iterator(self):
+        """Tests whether persistent_factorized_pair_iterator produces a sensible sequences of pair batches."""
 
         # Create a temporary folder with dummy files
-        folder_path, x_file_names, y_file_names = TestPairIterator.create_temporary_files(n=10, factor_count=4, x_shape=[3,4], folder_suffix='1')
+        folder_path, x_file_names, y_file_names = TestFactorizedPairIterators.create_temporary_files(n=10, factor_count=4, x_shape=[3,4], folder_suffix='1')
         
         # Initialize
-        batch_size = 2
-        iterator = mdis.PersistentFactorizedPairIterator(data_path= folder_path, x_file_names=x_file_names, y_file_names= y_file_names, x_shape=[3,4], batch_size=batch_size)
-        iterator.__indices__ = np.arange(len(y_file_names)) # Ensure x_a and y are not shuffled
-        rd.seed(42) # Ensure x_b are selected predicatbly at random
+        batch_size = 3
+        iterator = mdis.persistent_factorized_pair_iterator(data_path=folder_path, x_file_names=x_file_names, y_file_names= y_file_names, similarity_function=lambda y_a, y_b: y_a == y_b, batch_size=batch_size)
+        np.random.seed(42) # Ensure x_b are selected predicatbly at random
 
-        i = 0
-        b_indices = [1,0,4,3,3,2,1,8,1,9]
-        for batch in iterator:
-            X, Y = batch
+        a_indices = [[6,3,7],[2,6,7],[7,2,5],[5,1,4]] # The second axis is for batch size
+        b_indices = [[4,6,9],[4,3,7],[4,1,7],[0,9,5]]
+        for i in range(len(a_indices)): # i is batch index
+            X_ab, Y_ab = next(iterator)
             
-            for j in range(batch_size):
-                # Assert X_j
-                x_target_a = np.load(os.path.join(folder_path, x_file_names[i]))
-                x_target_b = np.load(os.path.join(folder_path, x_file_names[b_indices[i]]))
+            for j in range(batch_size): # j is instance index within batch
+                # Assert X_ab_j
+                x_target_a = np.load(os.path.join(folder_path, x_file_names[a_indices[i][j]]))
+                x_target_b = np.load(os.path.join(folder_path, x_file_names[b_indices[i][j]]))
                 x_target = np.concatenate([x_target_a[np.newaxis,:], x_target_b[np.newaxis,:]], axis=0)
-                x_observed = X[j].numpy()
+                x_observed = X_ab[j].numpy()
 
                 self.assertTupleEqual(x_target.shape, x_observed.shape)
                 self.assertAlmostEqual(np.sum((x_target-x_observed)**2), 0)
 
-                # Assert Y_j
-                y_target_a = np.load(os.path.join(folder_path, y_file_names[i]))
-                y_target_b = np.load(os.path.join(folder_path, y_file_names[b_indices[i]]))
+                # Assert Y_ab_j
+                y_target_a = np.load(os.path.join(folder_path, y_file_names[a_indices[i][j]]))
+                y_target_b = np.load(os.path.join(folder_path, y_file_names[b_indices[i][j]]))
                 y_target = np.array(y_target_a == y_target_b, dtype=np.float32)
-                y_observed = Y[j].numpy()
+                y_observed = Y_ab[j].numpy()
                 self.assertTupleEqual(y_target.shape, y_observed.shape)
                 self.assertAlmostEqual(np.sum((y_target - y_observed)**2), 0)
-                
-                # Manage indexing
-                i += 1    
 
         # Restore precondition
         shutil.rmtree(folder_path)
@@ -95,4 +84,4 @@ class TestPairIterator(unittest.TestCase):
     
 if __name__ == "__main__":
     #unittest.main()
-    TestPairIterator().test_next()
+    TestFactorizedPairIterators().test_persistent_factorized_pair_iterator()

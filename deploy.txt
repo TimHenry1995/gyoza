@@ -2,7 +2,7 @@ Documentation
 ensure requirements.txt contains all new libraries
 inside docs directory delete all files that are created by the command sphinx-apidoc -o docs src/gyoza to make sure they will be overidden next
 from within project directory call sphinx-apidoc -o docs src/gyoza
-update the conf.py by writing the following at the top of the file
+ensure the conf.py has the following code at the top of the file
 import os, sys
 for x in os.walk('.'):
   sys.path.insert(0, x[0])
@@ -13,7 +13,7 @@ for x in os.walk('..'):
 for x in os.walk(os.path.join("..","..")):
   sys.path.insert(0, x[0])
 
-update the version in conf.py of docs and update version number in pyproject.toml 
+update the version in conf.py of docs AND update version number in pyproject.toml 
 ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.todo','sphinx.ext.viewcode','sphinx.ext.autodoc']
 
 cd to docs directory, run make html

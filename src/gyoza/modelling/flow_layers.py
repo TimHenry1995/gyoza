@@ -52,12 +52,12 @@ class FlowLayer(tf.keras.Model, ABC):
         self.__axes__ = cp.copy(axes)
         """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
-    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: tf.keras.utils.Sequence=None) -> tf.Tensor:
-        """Fits self to data. Assumes that the model is compiled with loss and an optimizer. Unless overwritten by the subclass, this fit
-        method relies on a train_step method that passes an X batch through the model, flattens its output and after flattening the
-        Y batch, computes the loss to apply gradient descent. If ``X``, ``Y``, ``batch_size`` are specified, then no iterator is needed. 
-        Instead an iterator is created that samples ``batch_size`` instances from X and Y uniformly at random. Alternatively, ``X``, 
-        ``Y`` and ``batch_size`` can be omitted if an iterator is provided. 
+    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: Callable=None) -> tf.Tensor:
+        """Fits self to data. Assumes that the model is compiled with loss and an optimizer. Unless overwritten by the subclass, this 
+        fit method relies on a train_step method that passes an X batch through the model, flattens its output and after flattening 
+        the Y batch, computes the loss to apply gradient descent. If ``X``, ``Y``, ``batch_size`` are specified, then no iterator has 
+        to be specified. In that case, the fit method creates an iterator that samples ``batch_size`` instances from X and Y uniformly
+        at random. Alternatively, ``X``, ``Y`` and ``batch_size`` can be omitted if an iterator is provided. 
 
         :param epoch_count: The number of times self shall be calibrated on `iterator`. 
         :type epoch_count: int

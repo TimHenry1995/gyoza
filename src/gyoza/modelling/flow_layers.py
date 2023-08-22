@@ -75,8 +75,7 @@ class FlowLayer(tf.keras.Model, ABC):
         :type iterator: :class:`tf.keras.utils.Sequential`
         :return: 
             - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
-            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == 
-                [``epoch_count``].
+            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
         """
         
         # Input validity
@@ -307,8 +306,7 @@ class CheckerBoard(Permutation):
         :type limit: int
         :param direction: The direction in which the index is iterated. A value of 1 indicates incremental, -1 indicates decremental.
         :type direction: int
-        :return: An indicator for whether the endpoint has been reached.
-        :rtype: bool
+        :return: (bool) - An indicator for whether the endpoint has been reached.
         """
         if direction == 1: # Incremental
             return index == limit -1
@@ -446,8 +444,7 @@ class Coupling(FlowLayer, ABC):
         :param x: The data to be transformed. Shape [batch size, ...] has to allow for masking via 
             :py:attr:`self.__mask__`.
         :type x: :class:`tensorflow.Tensor`
-        :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product
-            with ``x``."""
+        :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product with ``x``."""
         
         # Propagate
         # Here we can not guarantee that the provided function uses x as name for first input.
@@ -688,6 +685,7 @@ class ActivationNormalization(FlowLayer):
         """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
         
         :param x: Data to be passed through :py:meth:`call`. It's shape must agree with input ``x`` of :py:meth:`self.__reshape_variables__`.
+        :type x: :class:`tensorflow.Tensor`
 
         :return: 
             - location (tensorflow.Variable) - The :py:attr:`__location__` attribute shaped to fit ``x``. 
@@ -915,12 +913,69 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
     in latent spaces of regular neural networks. It automatically uses the :class:`losses.SupervisedFactorLoss` to compute its losses.
     It also overrides the :class:`FlowLayer`'s implementation for train_step to accomodate for the fact that calibration does not
     simply use single instances but pairs of instances and their similarity.
+    
+    References:
+
+       - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
     
     def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
         super().__init__(sequence=sequence, **kwargs)
         self.__dimensions_per_factor__ = cp.copy(dimensions_per_factor) 
         """(List[int]) - A list that indicates for each factor (matched by index) how many dimensions are used."""
+
+    @staticmethod
+    def estimate_factor_dimensionalities(Z_ab: np.ndarray, Y_ab: np.ndarray) -> List[int]:
+        """Estimates the dimensionality of each factor and thus helps to use the constructor of this class. Internally, for each 
+        factor the instance pairs are selected such they represent a similar characteristic along that factor. The correlation of 
+        instance pairs is then obtained for each dimension. For a given factor, the sum of these correlations (relative to the 
+        overall sum) determines the number of dimensions. **Important:** If the factors of this model are categorical, it is 
+        covnenient to use this function with with regular training inputs ``X_ab``, ``Y_ab`` but such that instance pairs with a 
+        zero row in ``Y_ab`` are filtered out for efficiency. If there are quantitative factors, then the caller needs to ensure 
+        that their ``Y_ab`` is still binary, e.g. by discretizing the quantiative factors during computation of ``Y_ab``.
+        
+        :param Z_ab: A sample of input instances, arranged in pairs. These instances shall be drawn from the same propoulation as 
+            the inputs to this flow model during inference, yet flattened. Shape == [instance count, 2, dimension count], where 2 
+            is due to pairing. 
+        :type Z_ab: :class:`numpy.ndarray`
+        :param Y_ab: The factor-wise similarity of instances in each pair of ``Z_ab``. **IMPORTANT:** Here, it is assumed that the 
+            residual factor is at index 0 AND that the values of ``Y_ab`` are either 0 or 1. Shape == [instance count, factor count].
+        :type Y_ab: :class:`numpy.ndarray`
+
+        :return:
+            - dimensions_per_factor (List[int]) - The number of dimensions per factor (including the residual factor), summing up to the dimensionality of ``Z``. Ordering is the same is in ``Y_ab``.
+        """
+
+        # Input validity 
+        assert len(Z_ab.shape) == 3, f"The input Z_ab was expected to have shape [instance count, 2, dimension count], but has shape {Z_ab.shape}."
+        assert len(Y_ab.shape) == 2, f"The input Y_ab was expected to have shape [instance count, factor count], including the residual factor, but has shape {Y_ab.shape}."
+        assert Z_ab.shape[0] == Y_ab.shape[0], f"The inputs Z_ab and Y_ab were expected to have the same number of instances along the 0th axis, but have shape {Z_ab.shape}, {Y_ab.shape}, respectively."
+
+        # Iterate factors
+        instance_count, _, dimension_count = Z_ab.shape
+        factor_count = Y_ab.shape[1]
+        S = [None] * factor_count # Raw dimension counts per factor (Equation 11 of reference paper)
+        S[0] = dimension_count # Ensures equal contribtion of the residual factor if all other factors are represented in Z
+        for f in range(1, factor_count): # Residual factor at index 0 is already covered
+            # Select only the instances that have the same class along this factor
+            Z_ab_similar = Z_ab[Y_ab[:,f] == 1,:]
+            
+            # Compute correlation between pairs for each dimension (Equation 11 of reference paper)
+            S[f] = 0
+            for d in range(dimension_count): 
+                S[f] += np.corrcoef(Z_ab_similar[:,0,d], Z_ab_similar[:,1,d])[0,1] # corrcoef gives 2x2 matrix. [0,1] selects the correlation of interest. 
+
+        # Rescale S to make its entries add up to dimension_count
+        N = np.exp(S)
+        N = N / np.sum(N) * dimension_count
+        N = np.floor(N) # Get integer dimension counts. N might not add up to dimension_count at this point
+        N[0] += dimension_count - np.sum(N) # Move spare dimensions to residual factor to ensure sum(N) == dimension_count
+        
+        # Format
+        dimensions_per_factor = list(np.array(N, dtype=np.int32))
+
+        # Outputs
+        return list(dimensions_per_factor)
 
     def train_step(self, data):
         """Performs one step of gradient descent. Assumes self.optimzer and self.loss are initialized.

@@ -1095,6 +1095,65 @@ class TestActivationNormalization(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
 
+class TestSupervisedFactorNetwork(unittest.TestCase):
+
+    def test_estimate_factor_dimensionalities(self):
+        """This method tests whether the estimate factor dimensionalities method computes factors correctly.
+        """
+
+        # Inputs 
+        # The first dimensions is strongly correlated with factor 1 and moderately correlated with factor 2
+        # Same for the second dimension but with flipped order
+        # The third dimension in strongly correlated with the second factor and moderately with the first
+        # The same for the fourth but with flipped order
+        Z = np.array([[1,9,1,8.4],
+                      [1.1,9.2,1.2,8.3],
+                      [1.2,9.9,1.1,8.35],
+                      [4,5,1.25,8.38],
+                      [4.1,4,9.2,1.3],
+                      [4.5,4.99,9.1,1.4],
+                      [8,1,9.5,1.3],
+                      [8.1,1.2,9.55,1.35],
+                      [8.5,1.3,9.6,1.2]], dtype=np.float32)
+        
+        # For the first factor, the pairs are based on the first, second and third tiplet of instances in Z
+        # For the second factor, the pairs are based on the first four and last 5 instances of Z
+        Z_ab = np.zeros([18,2,4])
+        Z_ab[0:3,0,:] = Z[0:3,:]; Z_ab[0:2,1,:] = Z[1:3,:]; Z_ab[2,1,:] = Z[0,:]
+        Z_ab[3:6,0,:] = Z[3:6,:]; Z_ab[3:5,1,:] = Z[4:6,:]; Z_ab[5,1,:] = Z[3,:]
+        Z_ab[6:9,0,:] = Z[6:9,:]; Z_ab[6:8,1,:] = Z[7:9,:]; Z_ab[8,1,:] = Z[6,:]
+        Z_ab[9:13,0,:] = Z[0:4,:]; Z_ab[9:12,1,:] = Z[1:4,:]; Z_ab[12,1,:] = Z[0,:]
+        Z_ab[13:18,0,:] = Z[4:9,:]; Z_ab[13:17,1,:] = Z[5:9,:]; Z_ab[17,1,:] = Z[4,:]
+
+        # Indicates which pairs of Z_ab are similar along with factor
+        Y_ab = np.array([[0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,1,0],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1],
+                      [0,0,1]])
+
+        # Target
+        target = [3,0,1]
+
+        # Evaluate
+        dimensions_per_factor = mfl.SupervisedFactorNetwork.estimate_factor_dimensionalities(Z_ab=Z_ab, Y_ab=Y_ab)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(target), tuple2=tuple(dimensions_per_factor))
+
 if __name__ == "__main__":
     #unittest.main()
-    TestCheckerBoard().test_call_4_axes_3_odd_odd_odd_permutation()
+    TestSupervisedFactorNetwork().test_estimate_factor_dimensionalities()

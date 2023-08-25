@@ -115,7 +115,7 @@ def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_f
     assert len(X.shape) > 0 and Y.shape[0] > 0 and X.shape[0] == Y.shape[0], f"The inputs X and Y were expected to have the same number of instances along the initial axis, yet X has shape {X.shape} and Y has shape {Y.shape}."
     assert len(Y.shape) == 2, f"The shape of Y should be [instance count, factor count], but found {Y.shape}."
     factor_count = Y.shape[1] # Might in or exclude the residual factor
-    assert Y.shape >= 2, f"The input Y needs to have at least two instances."
+    assert len(Y.shape) >= 2, f"The input Y needs to have at least two instances."
     Y_ab_tmp = similarity_function(Y[0:1,:], Y[1:2,:])
     assert Y_ab_tmp.shape[1] == factor_count or Y_ab_tmp.shape[1] == factor_count + 1, f"The similarity function is expected to provide factor count many outputs (including the residual factor) but this could not be verified when feeding the first two instances in."
 

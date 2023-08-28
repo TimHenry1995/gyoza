@@ -914,14 +914,18 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
     It also overrides the :class:`FlowLayer`'s implementation for train_step to accomodate for the fact that calibration does not
     simply use single instances but pairs of instances and their similarity.
     
+    :param sigma: A measure of how tight clusters in the output space shall be. It is used to set up the factorized loss.
+    :type sigma: float
+
     References:
 
        - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
     
-    def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], **kwargs):
+    def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], sigma: float = 0.975, **kwargs):
         super().__init__(sequence=sequence, **kwargs)
         self.__dimensions_per_factor__ = cp.copy(dimensions_per_factor) 
+        self.__sigma__ = sigma
         """(List[int]) - A list that indicates for each factor (matched by index) how many dimensions are used."""
 
     @staticmethod
@@ -989,7 +993,7 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         
         # Ensure loss exists
         if not hasattr(self, "loss") or type(self.loss) != mls.SupervisedFactorLoss:
-            self.loss = mls.SupervisedFactorLoss(dimensions_per_factor=self.__dimensions_per_factor__)
+            self.loss = mls.SupervisedFactorLoss(dimensions_per_factor=self.__dimensions_per_factor__, sigma=self.__sigma__); del self.__sigma__
 
         # Unpack inputs
         X, Y = data

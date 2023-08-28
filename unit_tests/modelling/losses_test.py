@@ -24,7 +24,7 @@ class TestSupervisedFactorLoss(unittest.TestCase):
         """Tests whether SupervisedFactorLoss can compute the loss."""
 
         # Initialize
-        loss = mls.SupervisedFactorLoss(dimensions_per_factor=[2,1,3])
+        loss = mls.SupervisedFactorLoss(dimensions_per_factor=[2,1,3], sigma=1)
         z_tilde_a = tf.constant([[3,6,8,4,6,2], [4,8,7,6,5,9], [6,8,5,6,3,2]], dtype=tf.keras.backend.floatx())
         z_tilde_b = tf.constant([[3,6,5,7,8,4], [9,7,8,5,7,4], [9,7,2,5,3,6]], dtype=tf.keras.backend.floatx())
         j_a = tf.constant([4,6,7], dtype=tf.keras.backend.floatx())

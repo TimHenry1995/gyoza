@@ -32,7 +32,7 @@ class TestSupervisedFactorLoss(unittest.TestCase):
         y_true = tf.constant([[0,1,0],[0,0,1],[1,0,1]], dtype=tf.keras.backend.floatx())
 
         # Target
-        x_target = tf.constant(783512.5, dtype=tf.keras.backend.floatx())
+        x_target = tf.constant(813552.8, dtype=tf.keras.backend.floatx())
 
         # Observe
         x_observed = loss(y_true=tf.constant(y_true), y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))

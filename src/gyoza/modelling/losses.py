@@ -118,6 +118,7 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
         # NOTE: The authors forgot the multiplier 0.5 in front. Since it is not applied to each entire term, it does make a difference for the final result 
 
         # Iterate factors (according to term 10)
+        loss = 0
         for f in range(1, factor_count): # Excludes residual factor
             
             # This one leads points a to be multivariate normal
@@ -136,8 +137,11 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
             sigma = self.__sigma__ * y_true[:,f][:,tf.newaxis] # shape == [batch size, 1]
             term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - sigma * z_tilde_a, 2) / (1.0-sigma**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
         
-        # Take mean across instances (according to term 10)
-        loss = tf.reduce_mean(term_7 + term_8 + term_9, axis=0)  # Shape == [1]
+            # Take mean across instances (according to term 10)
+            current_loss = tf.reduce_mean(term_7 + term_8 + term_9, axis=0) # Shape == [1]
+            
+            # Add to the total loss (according to term 10), here weighted by the factor's dimensionality
+            loss += (self.__dimensions_per_factor__[f] / (dimension_count-self.__dimensions_per_factor__[f])) * current_loss
         
         # Outputs
         return loss

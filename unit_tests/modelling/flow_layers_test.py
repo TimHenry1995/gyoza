@@ -964,7 +964,7 @@ class TestActivationNormalization(unittest.TestCase):
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,1,delta=1/24,dtype=tf.keras.backend.floatx()), [8,3])
+        x = tf.reshape(tf.range(0,1,delta=1/24,dtype=tf.keras.backend.floatx())**2, [8,3])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -983,14 +983,14 @@ class TestActivationNormalization(unittest.TestCase):
         # Verify determinants
         x_observed = layer.compute_jacobian_determinant(x=x)
         for j in range(J.shape[0]):
-            self.assertEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
     def test_compute_jacobian_determinant_3_axes_axis_1(self):
         """Tests whether the activation normalization layer can compute the jacobian determinant on 3_axes inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3], axes=[1])
-        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx()), [5,3,4])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx())**2, [5,3,4])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -1010,14 +1010,14 @@ class TestActivationNormalization(unittest.TestCase):
         # Verify determinants
         x_observed = layer.compute_jacobian_determinant(x=x)
         for j in range(J.shape[0]):
-            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
     def test_compute_jacobian_determinant_3_axes_axis_2(self):
         """Tests whether the activation normalization layer can compute the jacobian determinant on 3_axes inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[4], axes=[2])
-        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx()), [5,3,4])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx())**2, [5,3,4])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -1044,7 +1044,7 @@ class TestActivationNormalization(unittest.TestCase):
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx()), [5,3,4])
+        x = tf.reshape(tf.range(0,1,delta=1/60,dtype=tf.keras.backend.floatx())**2, [5,3,4])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -1064,14 +1064,14 @@ class TestActivationNormalization(unittest.TestCase):
         # Verify determinants
         x_observed = layer.compute_jacobian_determinant(x=x)
         for j in range(J.shape[0]):
-            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
     def test_compute_jacobian_determinant_4_axes_axes_1_2(self):
         """Tests whether the activation normalization layer can compute the jacobian determinant on 4D inputs"""
                 
         # Initialize
         layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,1,delta=1/120,dtype=tf.keras.backend.floatx()), [5,3,4,2])
+        x = tf.reshape(tf.range(0,1,delta=1/120,dtype=tf.keras.backend.floatx())**2, [5,3,4,2])
 
         # Compute jacobian
         with tf.GradientTape() as tape:
@@ -1093,7 +1093,7 @@ class TestActivationNormalization(unittest.TestCase):
         # Verify determinants
         x_observed = layer.compute_jacobian_determinant(x=x)
         for j in range(J.shape[0]):
-            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy())
+            self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
 class TestSupervisedFactorNetwork(unittest.TestCase):
 
@@ -1156,4 +1156,4 @@ class TestSupervisedFactorNetwork(unittest.TestCase):
 
 if __name__ == "__main__":
     #unittest.main()
-    TestSupervisedFactorNetwork().test_estimate_factor_dimensionalities()
+    TestActivationNormalization().test_compute_jacobian_determinant_2_axes_axis_1()

@@ -623,13 +623,14 @@ class AffineCoupling(Coupling):
         return logarithmic_determinant
 
 class ActivationNormalization(FlowLayer):
-    """A trainable location and scale transformation of the data. For each dimension of the specified input shape, a scale and a location 
-    parameter is used. That is, if shape == [width, height], then 2 * width * height many parameters are used. Each pair of location and
-    scale is initialized to produce mean equal to 0 and variance equal to 1 for its dimension. To allow for invertibility, the scale parameter 
-    has to be non-zero and is therefore chosen to be on an exponential scale. Each dimension thus has the following activation 
+    """A trainable location and scale transformation of the data. For each dimension of the specified input shape, a scale and a 
+    location parameter is used. That is, if shape == [width, height], then 2 * width * height many parameters are used. Each pair of 
+    location and scale is initialized to produce mean equal to 0 and variance equal to 1 for its dimension. To allow for 
+    invertibility, the scale parameter is constrained to be non-zero. To simplifiy computation of the jacobian determinant on 
+    logarithmic scale, the scale parameter is here constrained to be positive. Each dimension has the following activation 
     normalization:
     
-    - y_hat = (x-l)/s, where s and l are the scale and location parameters for this dimension, respectively.
+    - y_hat = (x-l)/s, where s > 0 and l are the scale and location parameters for this dimension, respectively.
 
     :param shape: See base class :class:`FlowLayer`.
     :type shape: List[int]
@@ -651,7 +652,7 @@ class ActivationNormalization(FlowLayer):
         self.__location__ = tf.Variable(tf.zeros(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__location__")
         """The value by which each data point shall be translated."""
 
-        self.__scale__ = tf.Variable(tf.ones(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__scale__")
+        self.__scale__ = tf.Variable(tf.ones(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__scale__", constraint=lambda x: tf.clip_by_value(x, clip_value_min=1e-6, clip_value_max=x.dtype.max))
         """The value by which each data point shall be scaled."""
 
         self.__is_initialized__ = False
@@ -676,28 +677,28 @@ class ActivationNormalization(FlowLayer):
         
         # Update attributes first call will have standardizing effect
         self.__location__.assign(mean)
-        self.__scale__.assign(tf.math.log(standard_deviation))
+        self.__scale__.assign(standard_deviation)
 
         # Update initialization state
         self.__is_initialized__ = True
 
     def __prepare_variables_for_computation__(self, x:tf.Tensor) -> Tuple[tf.Variable, tf.Variable]:
-        """Prepares the variables for computation with data. This involves adjusting the scale to be non-zero and ensuring variable shapes are compatible with the data.
+        """Prepares the variables for computation with data. This ensures variable shapes are compatible with ``x``.
         
-        :param x: Data to be passed through :py:meth:`call`. It's shape must agree with input ``x`` of :py:meth:`self.__reshape_variables__`.
+        :param x: Data to be passed through :py:meth:`call`. It's shape must agree with input ``x`` of 
+            :py:meth:`self.__reshape_variables__`.
         :type x: :class:`tensorflow.Tensor`
 
         :return: 
             - location (tensorflow.Variable) - The :py:attr:`__location__` attribute shaped to fit ``x``. 
-            - scale (tensorflow.Variable) - The :py:attr:`__scale__` attribute ensured to be non-zero and shaped to fit ``x``."""
+            - scale (tensorflow.Variable) - The :py:attr:`__scale__` attribute shaped to fit ``x``."""
 
         # Shape variables to fit x
         axes = list(range(len(x.shape)))
         for axis in self.__axes__: axes.remove(axis)
         location = utt.expand_axes(x=self.__location__, axes=axes)
         scale = utt.expand_axes(x=self.__scale__, axes=axes)
-        scale = tf.math.exp(scale) # This is to prevent division by zero in call and to simplify the Jacobian determinant
-
+        
         # Outputs
         return location, scale
 
@@ -708,7 +709,7 @@ class ActivationNormalization(FlowLayer):
 
         # Transform
         location, scale = self.__prepare_variables_for_computation__(x=x)
-        y_hat = (x - location) / scale
+        y_hat = (x - location) / scale # Scale is positive due to constraint
 
         # Outputs
         return y_hat
@@ -732,9 +733,8 @@ class ActivationNormalization(FlowLayer):
                 dimension_count *= x.shape[axis] 
         
         # Compute logarithmic determinant
-        # By defintion: sum across dimensions for ln(scale), where scale = exp(self.__scale__)
-        # rewriting to: sum across dimensions for ln(exp(self.__scale__)) which results in:
-        logarithmic_determinant = - dimension_count * tf.math.reduce_sum(self.__scale__) # single instance 
+        # By defintion: sum across dimensions for ln(scale)
+        logarithmic_determinant = - dimension_count * tf.math.reduce_sum(tf.math.log(self.__scale__)) # single instance, scale is positive due to constraint, the - sign in front is because the scale is used in the denominator
         logarithmic_determinant = tf.ones(shape=[batch_size], dtype=tf.keras.backend.floatx()) * logarithmic_determinant
 
         # Outputs

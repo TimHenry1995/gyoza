@@ -52,7 +52,7 @@ class FlowLayer(tf.keras.Model, ABC):
         self.__axes__ = cp.copy(axes)
         """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
 
-    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: Callable=None) -> tf.Tensor:
+    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: Callable=None, X_validate:tf.Tensor=None, Y_validate: tf.Tensor=None, iterator_validate: Callable=None) -> tf.Tensor:
         """Fits self to data. Assumes that the model is compiled with loss and an optimizer. Unless overwritten by the subclass, this 
         fit method relies on a train_step method that passes an X batch through the model, flattens its output and after flattening 
         the Y batch, computes the loss to apply gradient descent. If ``X``, ``Y``, ``batch_size`` are specified, then no iterator has 
@@ -77,66 +77,86 @@ class FlowLayer(tf.keras.Model, ABC):
             - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
             - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
         """
-        
+        def iterate(X,Y, batch_size):
+                instance_count = X.shape[0]
+                while True:
+                    indices = np.random.randint(0,instance_count,size=[batch_size])
+                    yield X[indices], Y[indices]
+
         # Input validity
         if type(X) != type(None) or type(Y) != type(None) or type(batch_size) != type(None):
-            assert type(X) != type(None) and type(Y) != type(None) and type(batch_size) != type(None) and type(iterator) == type(None), f"If X, Y or batch size are provided, then all need to be provided while iterator shall be none. "
+            assert type(X) != type(None) and type(Y) != type(None) and type(batch_size) != type(None) and type(iterator) == type(None), f"If X, Y or batch size are provided, then all need to be provided while iterator shall be None. "
         else:
             assert type(iterator) != type(None), f"If neither X, Y, nor batch_size are specified, then an iterator must be provided."
+
+        if type(X_validate) != type(None) or type(Y_validate) != type(None):
+            assert type(X_validate) != type(None) and type(Y_validate) != type(None) and type(batch_size) != type(None) and type(iterator_validate) == type(None), f"If X_validate or Y_validate are provided, then batch_size needs to be provided while iterator_validate shall be None."
+            iterator_validate = iterate(X=X_validate, Y=Y_validate, batch_size=batch_size)
 
         # Initialization
         epoch_loss_means = [None] * epoch_count
         epoch_loss_standard_deviations = [None] * epoch_count
         batch_losses = [None] * batch_count
         if type(iterator) == type(None):
-            def iterate(X,Y, batch_size):
-                instance_count = X.shape[0]
-                while True:
-                    indices = np.random.randint(0,instance_count,size=[batch_size])
-                    yield X[indices], Y[indices]
             iterator = iterate(X=X, Y=Y, batch_size=batch_size)
+        if type(iterator_validate) != type(None):
+            epoch_loss_means_validate = [None] * epoch_count
+            epoch_loss_standard_deviations_validate = [None] * epoch_count
         
         # Iterate epochs
         for e in range(epoch_count):
             
-            # Iterate batches
-            for b in range(batch_count): batch_losses[b] = self.train_step(data=next(iterator)).numpy()
+            # Iterate batches to train step
+            for b in range(batch_count): 
+                with tf.GradientTape() as tape:
+                    loss = self.compute_loss(data=next(iterator))
+                        
+                # Compute gradients
+                trainable_variables = self.trainable_variables
+                gradients = tape.gradient(loss, trainable_variables)
+
+                # Update weights
+                self.optimizer.apply_gradients(zip(gradients, trainable_variables))
+                
+                batch_losses[b] = loss.numpy()
+
             epoch_loss_means[e] = np.mean(batch_losses)
             epoch_loss_standard_deviations[e] = np.std(batch_losses)
 
-        # Outputs
-        return epoch_loss_means, epoch_loss_standard_deviations
+            # Iterate batches to validate
+            if type(iterator_validate) != type(None):
+                for b in range(batch_count): batch_losses[b] = self.compute_loss(data=next(iterator_validate)).numpy()
+                epoch_loss_means_validate[e] = np.mean(batch_losses)
+                epoch_loss_standard_deviations[e] = np.std(batch_losses)
 
-    def train_step(self, data):
-        """Performs one step of gradient descent. Assumes self.optimzer and self.loss are initialized.
+        # Outputs
+        if type(iterator_validate) == type(None): return epoch_loss_means, epoch_loss_standard_deviations
+        else: return epoch_loss_means, epoch_loss_standard_deviations, epoch_loss_means_validate, epoch_loss_standard_deviations_validate
+
+    def compute_loss(self, data) -> tf.Tensor:
+        """Computes the loss of self on the ``data``. If the prediction of self on ``data`` does not have shape [instance count, 
+        dimension count], then it will be reshaped as such before computing the loss. The final loss is then the average loss across
+        instances.
 
         :param data: A tuple containg the batch of X and Y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
             ...] where ... is the shape of one input instance that has to fit through :py:attr:`self.sequence`. The tensorflow.Tensor
             Y shall be of same shape of X.
         :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
-        :return: loss: A scalar for the loss observed before applying the train step.
+        :return: loss (:class:`tensorflow.Tensor`) - A scalar for the loss observed before applying the train step.
         """
         
         # Unpack inputs
         X, Y = data
         
-        with tf.GradientTape() as tape:
-            # Predict
-            Y_hat = self(X, training=True)  # Forward pass
-            
-            # Flatten to apply loss (most keras losses expect flat inputs)
-            Y_flat = tf.reshape(Y, shape=[-1])
-            Y_hat_flat = tf.reshape(Y_hat, shape=[-1])
-            
-            # Compute loss
-            loss = self.loss(y_true=Y_flat, y_pred=Y_hat_flat)
-
-        # Compute gradients
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-
-        # Update weights
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # Predict
+        Y_hat = self(X, training=True)  # Forward pass
+        
+        # Flatten to apply loss (most keras losses expect flat inputs)
+        Y_flat = tf.reshape(Y, shape=[len(Y),-1])
+        Y_hat_flat = tf.reshape(Y_hat, shape=[len(Y_hat),-1])
+        
+        # Compute loss
+        loss = tf.reduce_mean(self.loss(y_true=Y_flat, y_pred=Y_hat_flat))
 
         # Outputs
         return loss
@@ -981,14 +1001,14 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         # Outputs
         return list(dimensions_per_factor)
 
-    def train_step(self, data):
-        """Performs one step of gradient descent. Assumes self.optimzer and self.loss are initialized.
+    def compute_loss(self, data) -> tf.Tensor:
+        """Computes the supervised factor loss for pairs of instances.
 
         :param data: A tuple containg the batch of X and Y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
             2, ...] where 2 indicates the pair x_a, x_b of same factor and ... is the shape of one input instance that has to fit 
             through :py:attr:`self.sequence`. The tensorflow.Tensor Y shall contain the factor indices of shape [batch size].
         :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
-        :return: loss: A scalar for the loss observed before applying the train step.
+        :return: loss (:class:`tensorflow.Tensor`) - A scalar for the loss observed before applying the train step.
         """
         
         # Ensure loss exists
@@ -999,24 +1019,16 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         X, Y = data
         z_a = X[:,0,:]; z_b = X[:,1,:]
         
-        with tf.GradientTape() as tape:
-            # First instance
-            z_tilde_a = self(z_a, training=True)  # Forward pass
-            j_a = self.compute_jacobian_determinant(x=z_a)
-            
-            # Second instance
-            z_tilde_b = self(z_b, training=True)
-            j_b = self.compute_jacobian_determinant(x=z_b)
-            
-            # Compute loss
-            loss = self.loss(y_true=Y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
-
-        # Compute gradients
-        trainable_vars = self.trainable_variables
-        gradients = tape.gradient(loss, trainable_vars)
-
-        # Update weights
-        self.optimizer.apply_gradients(zip(gradients, trainable_vars))
+        # First instance
+        z_tilde_a = self(z_a, training=True)  # Forward pass
+        j_a = self.compute_jacobian_determinant(x=z_a)
+        
+        # Second instance
+        z_tilde_b = self(z_b, training=True)
+        j_b = self.compute_jacobian_determinant(x=z_b)
+        
+        # Compute loss
+        loss = self.loss(y_true=Y, y_pred=(z_tilde_a, z_tilde_b, j_a, j_b))
 
         # Outputs
         return loss

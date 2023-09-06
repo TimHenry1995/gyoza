@@ -597,8 +597,8 @@ class AffineCoupling(Coupling):
 
         # Assert
         is_valid = type(parameters) == type([]) and len(parameters) == 2
-        is_valid = is_valid and type(parameters[0]) == tf.Tensor and type(parameters[1]) == tf.Tensor
-                                                                          
+        is_valid = is_valid and isinstance(parameters[0], tf.Tensor) and isinstance(parameters[1], tf.Tensor)
+          
         assert is_valid, f"For this coupling layer parameters is assumed to be of type List[tensorflow.Tensor], not {type(parameters)}."
     
     def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:

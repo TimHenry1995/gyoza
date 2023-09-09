@@ -134,8 +134,7 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
 
             # This leads points a and b (if they are labelled similar for current factor) to be close to each other
             factor_mask = tf.repeat(self.__factor_masks__[f,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
-            sigma = self.__sigma__ * y_true[:,f][:,tf.newaxis] # shape == [batch size, 1]
-            term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - sigma * z_tilde_a, 2) / (1.0-sigma**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
+            term_9 = 0.5 * y_true[:,f] * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - self.__sigma__ * z_tilde_a, 2) / (1.0-self.__sigma__**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
         
             # Take mean across instances and add to the total loss (according to term 10)
             loss += tf.reduce_mean(term_7 + term_8 + term_9, axis=0) # Shape == [1]

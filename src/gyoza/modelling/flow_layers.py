@@ -76,6 +76,8 @@ class FlowLayer(tf.keras.Model, ABC):
         :return: 
             - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
             - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
+            - epoch_loss_means_validate (:class:`tensorflow.Tensor`) - The mean loss per epoch for validation (if validation data was provided). Length == [``epoch_count``].
+            - epoch_loss_standard_deviations_validate (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch (if validation data was provided). Length == [``epoch_count``].
         """
         def iterate(X,Y, batch_size):
                 instance_count = X.shape[0]
@@ -127,7 +129,7 @@ class FlowLayer(tf.keras.Model, ABC):
             if type(iterator_validate) != type(None):
                 for b in range(batch_count): batch_losses[b] = self.compute_loss(data=next(iterator_validate)).numpy()
                 epoch_loss_means_validate[e] = np.mean(batch_losses)
-                epoch_loss_standard_deviations[e] = np.std(batch_losses)
+                epoch_loss_standard_deviations_validate[e] = np.std(batch_losses)
 
         # Outputs
         if type(iterator_validate) == type(None): return epoch_loss_means, epoch_loss_standard_deviations

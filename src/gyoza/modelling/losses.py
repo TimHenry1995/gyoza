@@ -120,24 +120,38 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
         # Iterate factors (according to term 10)
         loss = 0
         for f in range(1, factor_count): # Excludes residual factor
-            
-            # This one leads points a to be multivariate normal
-            term_7 = 0.5 * tf.reduce_sum(tf.pow(z_tilde_a, 2), axis=1) - j_a # Shape == [batch size]
+            # Mask out the instances that do not have the same class for the current factor
+            # because they are not relevant for the current iteration across factors
+            f_z_tilde_a = y_true[:,f:f+1] * z_tilde_a 
+            f_z_tilde_b = y_true[:,f:f+1] * z_tilde_b
+
+            # This one leads points f_z_tilde_a to be multivariate normal
+            term_7 = 0.5 * tf.reduce_sum(tf.pow(f_z_tilde_a, 2), axis=1) - y_true[:,f:f+1]*j_a # Shape == [batch size]
             
             # This leads points b to be normal along all other factor than f
             term_8 = 0
             for f_other in range(0, factor_count): # Includes residual factor
                 if f_other != f: 
                     factor_mask = tf.repeat(self.__factor_masks__[f_other,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
-                    term_8 += 0.5 * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b, 2), axis=1)  # Shape == [batch size]
-            term_8 -= j_b
-
+                    term_8 += 0.5 * tf.reduce_sum(factor_mask * tf.pow(f_z_tilde_b, 2), axis=1)  # Shape == [batch size]
+            term_8 -= y_true[:,f:f+1]*j_b
+            
             # This leads points a and b (if they are labelled similar for current factor) to be close to each other
             factor_mask = tf.repeat(self.__factor_masks__[f,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
-            term_9 = 0.5 * y_true[:,f] * tf.reduce_sum(factor_mask * tf.pow(z_tilde_b - y_true[:,f:f+1] * self.__sigma__ * z_tilde_a, 2) / (1.0-(y_true[:,f:f+1] * self.__sigma__)**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
+            term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(f_z_tilde_b - self.__sigma__ * f_z_tilde_a, 2) / (1.0-(y_true[:,f:f+1] * self.__sigma__)**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
         
             # Take mean across instances and add to the total loss (according to term 10)
-            loss += tf.reduce_mean(term_7 + term_8 + term_9, axis=0) # Shape == [1]
+            instance_weight = 1.0-tf.reduce_sum(y_true[:,f]).numpy()/tf.reduce_sum(y_true).numpy() # To pretend each factor got an equal number of pairs, we apply a weight based on pair count
+            loss += instance_weight*tf.reduce_sum(term_7 + term_8 + term_9, axis=0)/tf.reduce_sum(y_true[:,f]) # Shape == [1]
             
+            # For the instances that are not the same along the current factor dimension, just let them be normally distributed without correlation
+            f_z_tilde_a = (1-y_true[:,f:f+1]) * z_tilde_a 
+            f_z_tilde_b = (1-y_true[:,f:f+1]) * z_tilde_b
+            term_7 = 0.5 * tf.reduce_sum(tf.pow(f_z_tilde_a, 2), axis=1) - (1-y_true[:,f:f+1])*j_a # Shape == [batch size]
+            term_8 = 0.5 * tf.reduce_sum(tf.pow(f_z_tilde_b, 2), axis=1) - (1-y_true[:,f:f+1])*j_b # Shape == [batch size]
+            instance_weight = 1.0-tf.reduce_sum((1-y_true[:,f])).numpy()/tf.reduce_sum(1-y_true).numpy() # To pretend each factor got an equal number of pairs, we apply a weight based on pair count
+            loss += instance_weight*tf.reduce_sum(term_7 + term_8, axis=0)/tf.reduce_sum(1-y_true[:,f]) # Shape == [1]
+           
+
         # Outputs
         return loss

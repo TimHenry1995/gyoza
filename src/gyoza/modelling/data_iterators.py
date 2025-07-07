@@ -83,7 +83,7 @@ def persistent_factorized_pair_iterator(data_path: str, x_file_names: List[str],
         # Outputs
         yield X_ab, Y_ab 
 
-def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_function: Callable, batch_size: int) -> Tuple[tf.Tensor, tf.Tensor]:
+def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_function: Callable, batch_size: int, minimum_similarity: float) -> Tuple[tf.Tensor, tf.Tensor]:
     """This infinite iterator yields pairs of instances X_a and X_b along with their corresponding factorized similarity Y. Pairs are obtained 
     by shuffling X once for X_a and once for X_b. It is thus possible that pair i has the same instance in X_a and X_b, yet unlikely 
     for large instance counts in X. The iterator produces a instance count many pairs, split into batches. The last batch may be 
@@ -121,18 +121,29 @@ def volatile_factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, similarity_f
 
     # Convenience variables
     instance_count = Y.shape[0]
-    
+    Y_ab_shape = similarity_function(Y[:batch_size,:], Y[batch_size,:]).shape
+
     # Loop over batches
     while True:
         
-        # Select indices for instances a and b
-        a = np.random.randint(low=0, high=instance_count, size=batch_size)
-        b = np.random.randint(low=0, high=instance_count, size=batch_size)
+        # Choose random X_a instances
+        a_indices = np.random.randint(low=0, high=instance_count, size=batch_size)
+        X_a = tf.cast(X[a_indices,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
+        X_b = [None] * batch_size
 
-        # Select corresponding data points
-        X_a = tf.cast(X[a,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
-        X_b = tf.cast(X[b,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
+        # Search for partners to X_a such that each pair has minimum requried similarity and consists of 2 distinct instances
+        Y_ab = [None] * batch_size
+
+        for i in range(batch_size):
+            found_partner = False
+            while not found_partner:
+                b_index = np.random.randint(low=0, high=instance_count)
+                X_b[i] = tf.cast(X[b_index,:], tf.keras.backend.floatx())[tf.newaxis, tf.newaxis, :]
+                Y_ab[i] = tf.cast(similarity_function(Y[a_indices[i],tf.newaxis,:], Y[b_index][tf.newaxis,:]), tf.keras.backend.floatx())
+                found_partner = minimum_similarity <= tf.reduce_sum(Y_ab[i]).numpy() and a_indices[i] != b_index
+
+        X_b = tf.concat(X_b, axis=0) # Concatenate along instance axis
         X_ab = tf.concat([X_a, X_b], axis=1) # Concatenate along pair axis
-        Y_ab = tf.cast(similarity_function(Y[a,:], Y[b,:]), tf.keras.backend.floatx())
+        Y_ab = tf.concat(Y_ab, axis=0) # Concatenate along instance axis
 
         yield X_ab, Y_ab

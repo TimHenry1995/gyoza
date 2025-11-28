@@ -130,7 +130,12 @@ class FlowLayer(tf.keras.Model, ABC):
                 for b in range(batch_count): batch_losses[b] = self.compute_loss(data=next(iterator_validate)).numpy()
                 epoch_loss_means_validate[e] = np.mean(batch_losses)
                 epoch_loss_standard_deviations_validate[e] = np.std(batch_losses)
-
+            
+            # Print progress
+            if e % 10 == 0:
+                print(f"Epoch {e+1}/{epoch_count} - Loss: {epoch_loss_means[e]:.4f} - StdDev: {epoch_loss_standard_deviations[e]:.4f}", end="")
+                print(f" - Validation Loss: {epoch_loss_means_validate[e]:.4f} - Validation StdDev: {epoch_loss_standard_deviations_validate[e]:.4f}")
+                
         # Outputs
         if type(iterator_validate) == type(None): return epoch_loss_means, epoch_loss_standard_deviations
         else: return epoch_loss_means, epoch_loss_standard_deviations, epoch_loss_means_validate, epoch_loss_standard_deviations_validate

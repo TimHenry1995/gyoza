@@ -7,9 +7,9 @@ where = ["src"]
 
 [project]
 name = "gyoza"
-version = "0.2.1"
+version = "0.2.2"
 authors = [
-  { name="Tim Dick"},
+  { name="Tim Dick", email="timdi@icloud.com" },
 ]
 description = ""
 readme = "README.md"
@@ -31,4 +31,4 @@ dependencies = [
 
 [project.urls]
 "Homepage" = "https://github.com/pypa/sampleproject"
-
+"Bug Tracker" = "https://github.com/pypa/sampleproject/issues"

@@ -24,11 +24,12 @@ dependencies = [
     "matplotlib >= 3.5.3",
     "sphinx == 5.2.3",
     "sphinx-rtd-theme",
-    "numpy >= 1.21.6",
+    "numpy == 1.21.6",
     "build<0.10.0",
     "twine"
 ]
 
 [project.urls]
 "Homepage" = "https://github.com/pypa/sampleproject"
+
 "Bug Tracker" = "https://github.com/pypa/sampleproject/issues"

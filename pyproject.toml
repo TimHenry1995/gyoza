@@ -9,7 +9,7 @@ where = ["src"]
 name = "gyoza"
 version = "0.2.2"
 authors = [
-  { name="Tim Dick", email="timdi@icloud.com" },
+  { name="Tim Dick" },
 ]
 description = ""
 readme = "README.md"

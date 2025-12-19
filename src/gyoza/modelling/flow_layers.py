@@ -1,6 +1,6 @@
 import numpy as np
 import tensorflow as tf
-from typing import Any, Tuple, List, Callable
+from typing import Any, Tuple, List, Callable, Generator
 from abc import ABC
 import abc
 from gyoza.utilities import tensors as utt
@@ -9,13 +9,190 @@ import copy as cp
 from gyoza.modelling import losses as mls
 import random
 
-class FlowLayer(tf.keras.Model, ABC):
+
+class FlowModel(tf.keras.models.Sequential):
+    
+    def __init__(self, *args, **kwargs):
+        
+        # Input validity
+        if len(args) > 1: 
+            layers = args[0]
+            assert all([isinstance(layer, FlowLayer) for layer in layers]), f"The input `layers` provided to the FlowModel needs to be an array of FlowLayers but was {[type(layer) for layer in layers]}."
+        
+        # Super
+        super(FlowModel, self).__init__(*args, **kwargs) 
+        
+    def call(self, x: tf.Tensor) -> tf.Tensor:
+        """Executes the operation of this layer in the forward direction.
+
+        :param x: The data to be tranformed. Assumed to be of shape [batch size, ...].
+        :type x: :py:class:`tensorflow.Tensor`
+        :return: y_hat (:py:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""
+
+        # Transform
+        for layer in self.layers: x = layer(x=x)
+        y_hat = x
+
+        # Outputs
+        return y_hat
+    
+    def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
+        """Executes the operation of this layer in the inverse direction. It is thus the counterpart to :py:meth:`call`.
+
+        :param y_hat: The data to be transformed. Assumed to be of shape [batch size, ...].
+        :type y_hat: :py:class:`tensorflow.Tensor`
+        :return: x (:py:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
+
+        # Transform
+        for layer in reversed(self.layers): y_hat = layer.invert(y_hat=y_hat)
+        x = y_hat
+
+        # Outputs
+        return x
+
+    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
+        """Computes the jacobian determinant of this layer's :py:meth:`call` on a logarithmic scale. The
+        natural logarithm is chosen for numerical stability.
+
+        :param x: The data at which the determinant shall be computed. Assumed to be of shape [batch size, ...].
+        :type x: :py:class:`tensorflow.Tensor`
+        :return: logarithmic_determinant (:py:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
+        """ 
+
+        # Transform
+        logarithmic_determinant = 0
+        for layer in self.layers: 
+            logarithmic_determinant += layer.compute_jacobian_determinant(x=x) 
+            x = layer(x=x)
+            
+        # Outputs
+        return logarithmic_determinant
+
+    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: Callable=None, X_validate:tf.Tensor=None, Y_validate: tf.Tensor=None, iterator_validate: Callable=None) -> tf.Tensor:
+        """Fits self to data. Assumes that the model is compiled with loss and an optimizer. Unless overwritten by the subclass, this 
+        fit method relies on a train_step method that passes an X batch through the model, flattens its output and after flattening 
+        the Y batch, computes the loss to apply gradient descent. If ``X``, ``Y``, ``batch_size`` are specified, then no iterator has 
+        to be specified. In that case, the fit method creates an iterator that samples ``batch_size`` instances from X and Y uniformly
+        at random. Alternatively, ``X``, ``Y`` and ``batch_size`` can be omitted if an iterator is provided. 
+
+        :param epoch_count: The number of times self shall be calibrated on `iterator`. 
+        :type epoch_count: int
+        :param batch_count: The number of times a new batch shall be drawn from the `iterator` per epoch. 
+        :type batch_count: int
+        :param X: Input data to be fed through the network. Shape is assumed to be [instance count, ...], where ... needs to be 
+            compatible with the network.
+        :type X: :py:class:`tensorflow.Tensor`, optional
+        :param Y: Expected output data to be obtained after feeding ``X`` through the network. Shape is assumed to be [instance count, 
+            ...], where ... needs to be compatible with the network and indexing is assumed to be synchronous with ``X``.
+        :type Y: :py:class:`tensorflow.Tensor`, optional
+        :param batch_size: The number of instance that shall be sampled per batch.
+        :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...], where ... needs to be compatible with the 
+            network. 
+        :type iterator: :py:class:`tf.keras.utils.Sequential`
+        :return: 
+            - epoch_loss_means (:py:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
+            - epoch_loss_standard_deviations (:py:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
+            - epoch_loss_means_validate (:py:class:`tensorflow.Tensor`) - The mean loss per epoch for validation (if validation data was provided). Length == [``epoch_count``].
+            - epoch_loss_standard_deviations_validate (:py:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch (if validation data was provided). Length == [``epoch_count``].
+        """
+        def iterate(X,Y, batch_size):
+                instance_count = X.shape[0]
+                while True:
+                    indices = np.random.randint(0,instance_count,size=[batch_size])
+                    yield X[indices], Y[indices]
+
+        # Input validity
+        if type(X) != type(None) or type(Y) != type(None) or type(batch_size) != type(None):
+            assert type(X) != type(None) and type(Y) != type(None) and type(batch_size) != type(None) and type(iterator) == type(None), f"If X, Y or batch size are provided, then all need to be provided while iterator shall be None. "
+        else:
+            assert type(iterator) != type(None), f"If neither X, Y, nor batch_size are specified, then an iterator must be provided."
+
+        if type(X_validate) != type(None) or type(Y_validate) != type(None):
+            assert type(X_validate) != type(None) and type(Y_validate) != type(None) and type(batch_size) != type(None) and type(iterator_validate) == type(None), f"If X_validate or Y_validate are provided, then batch_size needs to be provided while iterator_validate shall be None."
+            iterator_validate = iterate(X=X_validate, Y=Y_validate, batch_size=batch_size)
+
+        # Initialization
+        epoch_loss_means = [None] * epoch_count
+        epoch_loss_standard_deviations = [None] * epoch_count
+        batch_losses = [None] * batch_count
+        if type(iterator) == type(None):
+            iterator = iterate(X=X, Y=Y, batch_size=batch_size)
+        if type(iterator_validate) != type(None):
+            epoch_loss_means_validate = [None] * epoch_count
+            epoch_loss_standard_deviations_validate = [None] * epoch_count
+        
+        progress_bar = tf.keras.utils.Progbar(epoch_count)
+
+        # Iterate epochs
+        for e in range(epoch_count):
+            
+            # Iterate batches to train step
+            for b in range(batch_count): 
+                with tf.GradientTape() as tape:
+                    loss = self.compute_loss(data=next(iterator))
+                        
+                # Compute gradients
+                trainable_variables = self.trainable_variables
+                gradients = tape.gradient(loss, trainable_variables)
+                
+                # Update weights
+                self.optimizer.apply_gradients(zip(gradients, trainable_variables))
+                
+                batch_losses[b] = loss.numpy()
+
+            epoch_loss_means[e] = np.mean(batch_losses)
+            epoch_loss_standard_deviations[e] = np.std(batch_losses)
+
+            # Iterate batches to validate
+            if type(iterator_validate) != type(None):
+                for b in range(batch_count): batch_losses[b] = self.compute_loss(data=next(iterator_validate)).numpy()
+                epoch_loss_means_validate[e] = np.mean(batch_losses)
+                epoch_loss_standard_deviations_validate[e] = np.std(batch_losses)
+            
+            # Print progress
+            values = [('Train Loss', np.round(epoch_loss_means[e], 4))]
+            if type(iterator_validate) != type(None): values += ('Validation Loss', np.round(epoch_loss_means_validate[e], 4))
+            progress_bar.update(current=e+1, values=values)
+                
+        # Outputs
+        if type(iterator_validate) == type(None): return epoch_loss_means, epoch_loss_standard_deviations
+        else: return epoch_loss_means, epoch_loss_standard_deviations, epoch_loss_means_validate, epoch_loss_standard_deviations_validate
+
+    def compute_loss(self, data) -> tf.Tensor:
+        """Computes the loss of self on the ``data``. If the prediction of self on ``data`` does not have shape [instance count, 
+        dimension count], then it will be reshaped as such before computing the loss. The final loss is then the average loss across
+        instances.
+
+        :param data: A tuple containg the batch of X and Y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
+            ...] where ... is the shape of one input instance that has to fit through :py:attr:`self.sequence`. The tensorflow.Tensor
+            Y shall be of same shape of X.
+        :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
+        :return: loss (:py:class:`tensorflow.Tensor`) - A scalar for the loss observed before applying the train step.
+        """
+        
+        # Unpack inputs
+        X, Y = data
+        
+        # Predict
+        Y_hat = self(X, training=True)  # Forward pass
+        
+        # Flatten to apply loss (most keras losses expect flat inputs)
+        Y_flat = tf.reshape(Y, shape=[len(Y),-1])
+        Y_hat_flat = tf.reshape(Y_hat, shape=[len(Y_hat),-1])
+        
+        # Compute loss
+        loss = tf.reduce_mean(self.loss(y_true=Y_flat, y_pred=Y_hat_flat))
+
+        # Outputs
+        return loss
+
+class FlowLayer(tf.keras.layers.Layer, ABC):
     """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
     initialization.
     
     :param shape: The shape of the input that shall be transformed by this layer. If you have e.g. a tensor [batch size, width, 
         height, color] and you want this layer to transform along width and height, you enter the shape [width, height]. If you 
-        want the layer to operate on the color you provide [color dimension count] instead.
+        want the layer to operate on the color you provide the shape [color] instead.
     :type shape: List[int]
     :param axes: The axes of transformation. In the example for ``shape`` on width and height you would enter [1,2] here, In the 
         example for color you would enter [3] here. Although axes are counted starting from zero, it is assumed that ``axes`` 
@@ -47,134 +224,18 @@ class FlowLayer(tf.keras.Model, ABC):
 
         # Attributes
         self.__shape__ = cp.copy(shape)
-        """(:class:`List[int]`) - The shape of the input that shall be transformed by this layer. For detail, see constructor of :class:`FlowLayer`"""
+        """(:py:class:`List[int]`) - The shape of the input that shall be transformed by this layer. For detail, see constructor of :py:class:`FlowLayer`"""
 
         self.__axes__ = cp.copy(axes)
-        """(:class:`List[int]`) - The axes of transformation. For detail, see constructor of :class:`FlowLayer`"""
-
-    def fit(self, epoch_count: int, batch_count:int, X:tf.Tensor=None, Y: tf.Tensor=None, batch_size: int=None, iterator: Callable=None, X_validate:tf.Tensor=None, Y_validate: tf.Tensor=None, iterator_validate: Callable=None) -> tf.Tensor:
-        """Fits self to data. Assumes that the model is compiled with loss and an optimizer. Unless overwritten by the subclass, this 
-        fit method relies on a train_step method that passes an X batch through the model, flattens its output and after flattening 
-        the Y batch, computes the loss to apply gradient descent. If ``X``, ``Y``, ``batch_size`` are specified, then no iterator has 
-        to be specified. In that case, the fit method creates an iterator that samples ``batch_size`` instances from X and Y uniformly
-        at random. Alternatively, ``X``, ``Y`` and ``batch_size`` can be omitted if an iterator is provided. 
-
-        :param epoch_count: The number of times self shall be calibrated on `iterator`. 
-        :type epoch_count: int
-        :param batch_count: The number of times a new batch shall be drawn from the `iterator` per epoch. 
-        :type batch_count: int
-        :param X: Input data to be fed through the network. Shape is assumed to be [instance count, ...], where ... needs to be 
-            compatible with the network.
-        :type X: :class:`tensorflow.Tensor`, optional
-        :param Y: Expected output data to be obtained after feeding ``X`` through the network. Shape is assumed to be [instance count, 
-            ...], where ... needs to be compatible with the network and indexing is assumed to be synchronous with ``X``.
-        :type Y: :class:`tensorflow.Tensor`, optional
-        :param batch_size: The number of instance that shall be sampled per batch.
-        :param iterator: An iterator that produces X, Y pairs of shape [batch_size, ...], where ... needs to be compatible with the 
-            network. 
-        :type iterator: :class:`tf.keras.utils.Sequential`
-        :return: 
-            - epoch_loss_means (:class:`tensorflow.Tensor`) - The mean loss per epoch. Length == [``epoch_count``].
-            - epoch_loss_standard_deviations (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch. Length == [``epoch_count``].
-            - epoch_loss_means_validate (:class:`tensorflow.Tensor`) - The mean loss per epoch for validation (if validation data was provided). Length == [``epoch_count``].
-            - epoch_loss_standard_deviations_validate (:class:`tensorflow.Tensor`) - The standard_deviation of loss per epoch (if validation data was provided). Length == [``epoch_count``].
-        """
-        def iterate(X,Y, batch_size):
-                instance_count = X.shape[0]
-                while True:
-                    indices = np.random.randint(0,instance_count,size=[batch_size])
-                    yield X[indices], Y[indices]
-
-        # Input validity
-        if type(X) != type(None) or type(Y) != type(None) or type(batch_size) != type(None):
-            assert type(X) != type(None) and type(Y) != type(None) and type(batch_size) != type(None) and type(iterator) == type(None), f"If X, Y or batch size are provided, then all need to be provided while iterator shall be None. "
-        else:
-            assert type(iterator) != type(None), f"If neither X, Y, nor batch_size are specified, then an iterator must be provided."
-
-        if type(X_validate) != type(None) or type(Y_validate) != type(None):
-            assert type(X_validate) != type(None) and type(Y_validate) != type(None) and type(batch_size) != type(None) and type(iterator_validate) == type(None), f"If X_validate or Y_validate are provided, then batch_size needs to be provided while iterator_validate shall be None."
-            iterator_validate = iterate(X=X_validate, Y=Y_validate, batch_size=batch_size)
-
-        # Initialization
-        epoch_loss_means = [None] * epoch_count
-        epoch_loss_standard_deviations = [None] * epoch_count
-        batch_losses = [None] * batch_count
-        if type(iterator) == type(None):
-            iterator = iterate(X=X, Y=Y, batch_size=batch_size)
-        if type(iterator_validate) != type(None):
-            epoch_loss_means_validate = [None] * epoch_count
-            epoch_loss_standard_deviations_validate = [None] * epoch_count
-        
-        # Iterate epochs
-        for e in range(epoch_count):
-            
-            # Iterate batches to train step
-            for b in range(batch_count): 
-                with tf.GradientTape() as tape:
-                    loss = self.compute_loss(data=next(iterator))
-                        
-                # Compute gradients
-                trainable_variables = self.trainable_variables
-                gradients = tape.gradient(loss, trainable_variables)
-
-                # Update weights
-                self.optimizer.apply_gradients(zip(gradients, trainable_variables))
-                
-                batch_losses[b] = loss.numpy()
-
-            epoch_loss_means[e] = np.mean(batch_losses)
-            epoch_loss_standard_deviations[e] = np.std(batch_losses)
-
-            # Iterate batches to validate
-            if type(iterator_validate) != type(None):
-                for b in range(batch_count): batch_losses[b] = self.compute_loss(data=next(iterator_validate)).numpy()
-                epoch_loss_means_validate[e] = np.mean(batch_losses)
-                epoch_loss_standard_deviations_validate[e] = np.std(batch_losses)
-            
-            # Print progress
-            if e % 10 == 0:
-                print(f"Epoch {e+1}/{epoch_count} - Loss: {epoch_loss_means[e]:.4f} - StdDev: {epoch_loss_standard_deviations[e]:.4f}", end="")
-                print(f" - Validation Loss: {epoch_loss_means_validate[e]:.4f} - Validation StdDev: {epoch_loss_standard_deviations_validate[e]:.4f}")
-                
-        # Outputs
-        if type(iterator_validate) == type(None): return epoch_loss_means, epoch_loss_standard_deviations
-        else: return epoch_loss_means, epoch_loss_standard_deviations, epoch_loss_means_validate, epoch_loss_standard_deviations_validate
-
-    def compute_loss(self, data) -> tf.Tensor:
-        """Computes the loss of self on the ``data``. If the prediction of self on ``data`` does not have shape [instance count, 
-        dimension count], then it will be reshaped as such before computing the loss. The final loss is then the average loss across
-        instances.
-
-        :param data: A tuple containg the batch of X and Y, respectively. X is assumed to be a tensorflow.Tensor of shape [batch size,
-            ...] where ... is the shape of one input instance that has to fit through :py:attr:`self.sequence`. The tensorflow.Tensor
-            Y shall be of same shape of X.
-        :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
-        :return: loss (:class:`tensorflow.Tensor`) - A scalar for the loss observed before applying the train step.
-        """
-        
-        # Unpack inputs
-        X, Y = data
-        
-        # Predict
-        Y_hat = self(X, training=True)  # Forward pass
-        
-        # Flatten to apply loss (most keras losses expect flat inputs)
-        Y_flat = tf.reshape(Y, shape=[len(Y),-1])
-        Y_hat_flat = tf.reshape(Y_hat, shape=[len(Y_hat),-1])
-        
-        # Compute loss
-        loss = tf.reduce_mean(self.loss(y_true=Y_flat, y_pred=Y_hat_flat))
-
-        # Outputs
-        return loss
+        """(:py:class:`List[int]`) - The axes of transformation. For detail, see constructor of :py:class:`FlowLayer`"""
 
     @abc.abstractmethod
     def call(self, x: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the forward direction.
 
         :param x: The data to be tranformed. Assumed to be of shape [batch size, ...].
-        :type x: :class:`tensorflow.Tensor`
-        :return: y_hat (:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
+        :type x: :py:class:`tensorflow.Tensor`
+        :return: y_hat (:py:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
         raise NotImplementedError()
 
     @abc.abstractmethod
@@ -182,8 +243,8 @@ class FlowLayer(tf.keras.Model, ABC):
         """Executes the operation of this layer in the inverse direction. It is thus the counterpart to :py:meth:`call`.
 
         :param y_hat: The data to be transformed. Assumed to be of shape [batch size, ...].
-        :type y_hat: :class:`tensorflow.Tensor`
-        :return: x (:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
+        :type y_hat: :py:class:`tensorflow.Tensor`
+        :return: x (:py:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
 
         raise NotImplementedError()
 
@@ -193,8 +254,8 @@ class FlowLayer(tf.keras.Model, ABC):
         natural logarithm is chosen for numerical stability.
 
         :param x: The data at which the determinant shall be computed. Assumed to be of shape [batch size, ...].
-        :type x: :class:`tensorflow.Tensor`
-        :return: logarithmic_determinant (:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
+        :type x: :py:class:`tensorflow.Tensor`
+        :return: logarithmic_determinant (:py:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
         """        
 
         raise NotImplementedError()
@@ -203,9 +264,9 @@ class Permutation(FlowLayer):
     """This layer flattens its input :math:`x` along ``axes``, then reorders the dimensions using ``permutation`` and reshapes 
     :math:`x` to its original shape. 
 
-    :param shape: See base class :class:`FlowLayer`.
+    :param shape: See base class :py:class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`.
+    :param axes: See base class :py:class:`FlowLayer`.
     :type axes: List[int]
     :param permutation: A new order of the indices in the interval [0, product(``shape``)).
     :type permutation: List[int]
@@ -222,11 +283,19 @@ class Permutation(FlowLayer):
     
         # Attributes
         permutation = tf.constant(permutation)
-        self.__forward_permutation__ = tf.Variable(permutation, trainable=False, name="forward_permutation") # name is needed for getting and setting weights
-        """(:class:`tensorflow.Variable`) - Stores the permutation vector for the forward operation."""
+        self.__forward_permutation__ = self.add_weight(shape = permutation.shape,
+                                                       initializer = permutation,
+                                                       dtype = permutation.dtype,
+                                                       trainable = False,
+                                                       name="forward_permutation") # name is needed for getting and setting weights
+        """(:py:class:`tensorflow.Variable`) - Stores the permutation vector for the forward operation."""
         
-        self.__inverse_permutation__ = tf.Variable(tf.argsort(permutation), trainable=False, name="inverse_permutation")
-        """(:class:`tensorflow.Variable`) - Stores the permutation vector for the inverse operation."""
+        self.__inverse_permutation__ = self.add_weight(shape = permutation.shape,
+                                                       initializer = tf.argsort(permutation), 
+                                                       dtype = permutation.dtype,
+                                                       trainable=False, 
+                                                       name="inverse_permutation")
+        """(:py:class:`tensorflow.Variable`) - Stores the permutation vector for the inverse operation."""
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
         
@@ -274,13 +343,13 @@ class Permutation(FlowLayer):
 class Shuffle(Permutation):
     """Shuffles input :math:`x`. The permutation used for shuffling is randomly chosen once during initialization. 
     Thereafter it is saved as a private attribute. Shuffling is thus deterministic. **IMPORTANT:** The shuffle function is defined on 
-    a vector, yet by the requirement of :class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis 
-    in ``axes``. As described in :class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the shuffling can
-    be applied. For background information see :class:`Permutation`.
+    a vector, yet by the requirement of :py:class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis 
+    in ``axes``. As described in :py:class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the shuffling can
+    be applied. For background information see :py:class:`Permutation`.
     
-    :param shape: See base class :class:`FlowLayer`.
+    :param shape: See base class :py:class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`.
+    :param axes: See base class :py:class:`FlowLayer`.
     :type axes: List[int]
     """
 
@@ -294,13 +363,13 @@ class Shuffle(Permutation):
 class Heaviside(Permutation):
     """Swops the first and second half of input :math:`x` as inspired by the `Heaviside 
     <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function.  **IMPORTANT:** The Heaviside function is defined on a vector, 
-    yet by the requirement of :class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis in ``axes``.
-    As described in :class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the swopping can be applied. 
-    For background information see :class:`Permutation`.
+    yet by the requirement of :py:class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis in ``axes``.
+    As described in :py:class:`Permutation`, an input :math:`x` is first flattened along ``axes`` and thus the swopping can be applied. 
+    For background information see :py:class:`Permutation`.
 
-    :param shape: See base class :class:`FlowLayer`.
+    :param shape: See base class :py:class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`.
+    :param axes: See base class :py:class:`FlowLayer`.
     :type axes: List[int]
     """
 
@@ -310,16 +379,16 @@ class Heaviside(Permutation):
         dimension_count = tf.reduce_prod(shape).numpy()
         permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
         super(Heaviside, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
- 
+
 class CheckerBoard(Permutation):
     """Swops the entries of inputs :math:`x` as inspired by the `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_
     pattern. Swopping is done to preserve adjacency of cells within :math:`x`. **IMPORTANT:** The checkerboard pattern is usually
     defined on a matrix, i.e. 2 axes. Yet, here it is possible to specify any number of axes.
 
-    :param axes: See base class :class:`FlowLayer`.
-    :type axes: :class:`List[int]`
-    :param shape: See base class :class:`FlowLayer`. 
-    :type shape: :class:`List[int]`
+    :param axes: See base class :py:class:`FlowLayer`.
+    :type axes: :py:class:`List[int]`
+    :param shape: See base class :py:class:`FlowLayer`. 
+    :type shape: :py:class:`List[int]`
     """
 
     @staticmethod
@@ -341,16 +410,16 @@ class CheckerBoard(Permutation):
             return index == 0
 
     @staticmethod
-    def generate_rope_indices(shape: List[int]) -> List[int]:
+    def generate_rope_indices(shape: List[int]) -> Generator[int, None, None]:
         """Generates indices to traverse a tensor of ``shape``. The traversal follows a rope fitted along the axes by prioritizing
         later axes before earlier axes.
 
         :param shape: The shape of the tensor to be traversed.
-        :type shape: :class:`List[int]`
-        :yield: current_indices (:class:`List[int]`) - The indices pointing to the current cell in the tensor. It provides one index
+        :type shape: :py:class:`List[int]`
+        :yield: current_indices (:py:class:`List[int]`) - The indices pointing to the current cell in the tensor. It provides one index
             along each axis of ``shape``.
         """
-        dimension_count = np.product(shape)
+        dimension_count = np.prod(shape)
         current_indices = [0] * len(shape)
         yield current_indices
         directions = [1] * len(shape)
@@ -368,7 +437,7 @@ class CheckerBoard(Permutation):
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
         # Set up permutation vector
-        dimension_count = np.product(shape)
+        dimension_count = np.prod(shape)
         tensor = np.reshape(np.arange(dimension_count), shape)
         rope_values = [None] * dimension_count
         
@@ -414,15 +483,15 @@ class Coupling(FlowLayer, ABC):
     create non-linear mappings from :math:`x` to :math:`y`. The coupling law :math:`f` is chosen by this layer to be trivially 
     invertible and to have tractable Jacobian determinant which ensures that the overall layer also has these two properties.
 
-    :param shape: See base class :class:`FlowLayer`.
+    :param shape: See base class :py:class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`.
+    :param axes: See base class :py:class:`FlowLayer`.
     :type axes: List[int]
     :param compute_coupling_parameters: See the placeholder member :py:meth:`compute_coupling_parameters` for a detailed description 
         of requirements.
-    :type compute_coupling_parameters: :class:`tensorflow.keras.Model`
+    :type compute_coupling_parameters: :py:class:`tensorflow.keras.Layer`
     :param mask: The mask used to select one half of the data while discarding the other half.
-    :type mask: :class:`gyoza.modelling.masks.Mask`
+    :type mask: :py:class:`gyoza.modelling.masks.Mask`
     
     References:
 
@@ -430,8 +499,10 @@ class Coupling(FlowLayer, ABC):
         - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: mms.Mask, **kwargs):
-
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: mms.Mask, **kwargs):
+        
+        self.config = {"shape": shape, "axes":axes, "compute_coupling_parameters": compute_coupling_parameters, "mask": mask, **kwargs}
+        
         # Super
         super(Coupling, self).__init__(shape=shape, axes=axes, **kwargs)
 
@@ -448,30 +519,30 @@ class Coupling(FlowLayer, ABC):
 
         # Attributes
         self.__compute_coupling_parameters__ = compute_coupling_parameters
-        """(Callable) used inside the wrapper :py:meth:`compute_coupling_parameters`"""
+        """(:py:class:`tensorflow.keras.Layer`) used inside the wrapper :py:meth:`compute_coupling_parameters`"""
         
         self.__mask__ = mask
-        """(:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
+        """(:py:class:`gyoza.modelling.masks.Mask`) - The mask used to select one half of the data while discarding the other half."""
 
     @staticmethod
-    def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
+    def __assert_parameter_validity__(parameters: tf.Tensor | List[tf.Tensor]) -> bool:
         """Determines whether the parameters are valid for coupling.
        
         :param parameters: The parameters to be checked.
-        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensor`]
+        :type parameters: :py:class:`tensorflow.Tensor` or List[:py:class:`tensorflow.Tensor`]
         """
 
         # Assertion
         assert isinstance(parameters, tf.Tensor), f"For this coupling layer parameters is assumed to be of type tensorflow.Tensor, not {type(parameters)}"
     
     def compute_coupling_parameters(self, x: tf.Tensor) -> tf.Tensor:
-        """A callable, e.g. a :class:`tensorflow.keras.Model` object that maps ``x`` to coupling parameters used to couple 
+        """A callable, e.g. a :py:class:`tensorflow.keras.Layer` object that maps ``x`` to coupling parameters used to couple 
         ``x`` with itself. The model may be arbitrarily complicated and does not have to be invertible.
         
         :param x: The data to be transformed. Shape [batch size, ...] has to allow for masking via 
             :py:attr:`self.__mask__`.
-        :type x: :class:`tensorflow.Tensor`
-        :return: y_hat (:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product with ``x``."""
+        :type x: :py:class:`tensorflow.Tensor`
+        :return: y_hat (:py:class:`tensorflow.Tensor`) - The transformed version of ``x``. It's shape must support the Hadamard product with ``x``."""
         
         # Propagate
         # Here we can not guarantee that the provided function uses x as name for first input.
@@ -501,28 +572,28 @@ class Coupling(FlowLayer, ABC):
         return y_hat
     
     @abc.abstractmethod
-    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor | List[tf.Tensor]) -> tf.Tensor:
         """This function implements an invertible coupling for inputs ``x`` and ``parameters``.
         
         :param x: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on axes of :py:attr:`self.__mask__`. 
-        :type x: :class:`tensorflow.Tensor`
+        :type x: :py:class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``x``. It's shape is assumed to support the 
             Hadamard product with ``x``.
-        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensow`]
-        :return: y_hat (:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``x``."""
+        :type parameters: :py:class:`tensorflow.Tensor` or List[:py:class:`tensorflow.Tensow`]
+        :return: y_hat (:py:class:`tensorflow.Tensor`) - The coupled tensor of same shape as ``x``."""
 
         raise NotImplementedError()
     
     @abc.abstractmethod
-    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor | List[tf.Tensor]) -> tf.Tensor:
         """This function is the inverse of :py:meth:`__couple__`.
         
         :param y_hat: The data to be transformed. Shape assumed to be [batch size, ...] where ... depends on axes :py:attr:`self.__mask__`.
-        :type y_hat: :class:`tensorflow.Tensor`
+        :type y_hat: :py:class:`tensorflow.Tensor`
         :param parameters: Constitutes the parameters that shall be used to transform ``y_hat``. It's shape is assumed to support the 
             Hadamard product with ``x``.
-        :type parameters: :class:`tensorflow.Tensor` or List[:class:`tensorflow.Tensow`]
-        :return: y_hat (:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``y_hat``."""
+        :type parameters: :py:class:`tensorflow.Tensor` or List[:py:class:`tensorflow.Tensow`]
+        :return: y_hat (:py:class:`tensorflow.Tensor`) - The decoupled tensor of same shape as ``y_hat``."""
 
         raise NotImplementedError()
     
@@ -547,19 +618,19 @@ class Coupling(FlowLayer, ABC):
     
 class AdditiveCoupling(Coupling):
     """This coupling layer implements an additive coupling law of the form :math:`f(x_2, c(x_1) = x_2 + c(x_1)`. For details on the
-    encapsulating theory refer to :class:`Coupling`.
+    encapsulating theory refer to :py:class:`Coupling`.
     
     References:
 
         - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: tf.Tensor, **kwargs):
         
         # Super
         super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
 
-    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor | List[tf.Tensor]) -> tf.Tensor:
         
         # Couple
         y_hat = x + parameters
@@ -567,7 +638,7 @@ class AdditiveCoupling(Coupling):
         # Outputs
         return y_hat
     
-    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor | List[tf.Tensor]) -> tf.Tensor:
         
         # Decouple
         x = y_hat - parameters
@@ -587,20 +658,20 @@ class AdditiveCoupling(Coupling):
 class AffineCoupling(Coupling):
     """This coupling layer implements an affine coupling law of the form :math:`f(x_2, c(x_1) = e^s x_2 + t`, where :math:`s, t = c(x)`. 
     To prevent division by zero during decoupling, the exponent of :math:`s` is used as scale. For details on the encapsulating 
-    theory refer to :class:`Coupling`. 
+    theory refer to :py:class:`Coupling`. 
     
     References:
 
         - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Model, mask: tf.Tensor, **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: tf.Tensor, **kwargs):
         
         # Super
         super(AffineCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
 
     @staticmethod
-    def __assert_parameter_validity__(parameters: tf.Tensor or List[tf.Tensor]) -> bool:
+    def __assert_parameter_validity__(parameters: tf.Tensor | List[tf.Tensor]) -> bool:
 
         # Assert
         is_valid = type(parameters) == type([]) and len(parameters) == 2
@@ -608,7 +679,7 @@ class AffineCoupling(Coupling):
           
         assert is_valid, f"For this coupling layer parameters is assumed to be of type List[tensorflow.Tensor], not {type(parameters)}."
     
-    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+    def __couple__(self, x: tf.Tensor, parameters: tf.Tensor | List[tf.Tensor]) -> tf.Tensor:
         
         # Unpack
         scale = tf.exp(parameters[0])
@@ -620,7 +691,7 @@ class AffineCoupling(Coupling):
         # Outputs
         return y_hat
     
-    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor or List[tf.Tensor]) -> tf.Tensor:
+    def __decouple__(self, y_hat: tf.Tensor, parameters: tf.Tensor | List[tf.Tensor]) -> tf.Tensor:
         
         # Unpack
         scale = tf.exp(parameters[0])
@@ -659,9 +730,9 @@ class ActivationNormalization(FlowLayer):
     
     - y_hat = (x-l)/s, where s > 0 and l are the scale and location parameters for this dimension, respectively.
 
-    :param shape: See base class :class:`FlowLayer`.
+    :param shape: See base class :py:class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`.
+    :param axes: See base class :py:class:`FlowLayer`.
     :type axes: List[int]
     
     References:
@@ -670,26 +741,44 @@ class ActivationNormalization(FlowLayer):
     - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer. <https://arxiv.org/abs/2004.13166>`_
     """
     
+    __instance_count__ = 0 # Counts how many instances of this class have been created in order to provide unique names to the weights/ biases
+
+    class __PositiveConstraint__(tf.keras.constraints.Constraint):
+
+        def __call__(self, w: tf.Variable):
+            return tf.clip_by_value(w.value, clip_value_min=1e-6, clip_value_max=w.value.dtype.max)
+
     def __init__(self, shape: List[int], axes: List[int], **kwargs):
 
         # Super
         super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
         
         # Attributes
-        self.__location__ = tf.Variable(tf.zeros(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__location__")
+        self.__location__ = self.add_weight(shape = shape,
+                                           initializer = "zeros",
+                                           dtype = tf.keras.backend.floatx(),
+                                           trainable = True,
+                                           name="__location__")
         """The value by which each data point shall be translated."""
-
-        self.__scale__ = tf.Variable(tf.ones(shape, dtype=tf.keras.backend.floatx()), trainable=True, name="__scale__", constraint=lambda x: tf.clip_by_value(x, clip_value_min=1e-6, clip_value_max=x.dtype.max))
+        
+        self.__scale__ = self.add_weight(shape = shape,
+                                        initializer = tf.ones(shape),
+                                        dtype = tf.keras.backend.floatx(), 
+                                        trainable=True, 
+                                        constraint=ActivationNormalization.__PositiveConstraint__(),
+                                        name="__scale__")
         """The value by which each data point shall be scaled."""
 
-        self.__is_initialized__ = False
+        self.__instance_count__ += 1
+
+        self.__is_initialized__ = False # This corresponds to the actual mean and standard deviation of the data and is set during the first call with real data
         """An indicator for whether lazy initialization has been executed previously."""
 
     def __lazy_init__(self, x: tf.Tensor) -> None:
         """This method shall be used to lazily initialize the variables of self.
         
         :param x: The data that is propagated through :py:meth:`call`.
-        :type x: :class:`tensorflow.Tensor`"""
+        :type x: :py:class:`tensorflow.Tensor`"""
 
         # Move self.__axes__ to the end
         for a, axis in enumerate(self.__axes__): x = utt.move_axis(x=x, from_index=axis-a, to_index=-1) # Relies on assumption that axes are ascending
@@ -714,7 +803,7 @@ class ActivationNormalization(FlowLayer):
         
         :param x: Data to be passed through :py:meth:`call`. It's shape must agree with input ``x`` of 
             :py:meth:`self.__reshape_variables__`.
-        :type x: :class:`tensorflow.Tensor`
+        :type x: :py:class:`tensorflow.Tensor`
 
         :return: 
             - location (tensorflow.Variable) - The :py:attr:`__location__` attribute shaped to fit ``x``. 
@@ -730,9 +819,9 @@ class ActivationNormalization(FlowLayer):
         return location, scale
 
     def call(self, x: tf.Tensor) -> tf.Tensor:
-
+        
         # Ensure initialization of variables
-        if not self.__is_initialized__: self.__lazy_init__(x=x)
+        if not tf.is_symbolic_tensor(x) and not self.__is_initialized__: self.__lazy_init__(x=x)
 
         # Transform
         location, scale = self.__prepare_variables_for_computation__(x=x)
@@ -773,9 +862,9 @@ class Reflection(FlowLayer):
     the hyperplane of reflection. When ``axes`` contains more than a single entry, the input is first flattened along these axes, 
     then reflected and then unflattened to original shape.
 
-    :param shape: See base class :class:`FlowLayer`.
+    :param shape: See base class :py:class:`FlowLayer`.
     :type shape: List[int]
-    :param axes: See base class :class:`FlowLayer`. **IMPORTANT**: These axes are distinct from the learnable reflection axes.
+    :param axes: See base class :py:class:`FlowLayer`. **IMPORTANT**: These axes are distinct from the learnable reflection axes.
     :type axes: List[int]
     :param reflection_count: The number of successive reflections that shall be executed. Expected to be at least 1.
     :type reflection_count: int
@@ -794,14 +883,18 @@ class Reflection(FlowLayer):
 
         # Attributes
         dimension_count = tf.reduce_prod(shape).numpy()
-        reflection_normals = tf.math.l2_normalize(tf.random.uniform(shape=[reflection_count, dimension_count], dtype=tf.keras.backend.floatx()), axis=1) 
+        reflection_normals = tf.math.l2_normalize(-1+2*tf.random.uniform(shape=[reflection_count, dimension_count], dtype=tf.keras.backend.floatx()), axis=1) 
         
-        self.__reflection_normals__ = tf.Variable(reflection_normals, trainable=True, name="reflection_normals") # name is needed for getting and setting weights
-        """(:class:`tensorflow.Tensor`) - These are the axes along which an instance is reflected. Shape == [reflection count, dimension count] where dimension count is the product of the shape of the input instance along :py:attr:`self.__axes__`."""
-
+        self.__reflection_normals__ = self.add_weight(shape = reflection_normals.shape,
+                                                     initializer = reflection_normals,
+                                                     dtype = reflection_normals.dtype,
+                                                     trainable = True,
+                                                     name="reflection_normals",
+                                                     constraint=tf.keras.constraints.UnitNorm(axis=1)) # name is needed for getting and setting weights
+        """(:py:class:`tensorflow.Tensor`) - These are the axes along which an instance is reflected. Shape == [reflection count, dimension count] where dimension count is the product of the shape of the input instance along :py:attr:`self.__axes__`."""
+        
         self.__inverse_mode__ = False
         "(bool) - Indicates whether the reflections shall be executed in reversed order (True) or forward order (False)."
-
 
     def __reflect__(self, x: tf.Tensor) -> tf.Tensor:
         """This function executes all the reflections of self in a sequence by multiplying ``x`` with the corresponding Householder 
@@ -811,8 +904,8 @@ class Reflection(FlowLayer):
         :param x: The flattened data of shape [..., dimension count], where dimension count is the product of the :py:attr:`__shape__` as 
             specified during initialization of self. It is assumed that all axes except for :py:attr:`__axes__` (again, see 
             initialization of self) are moved to ... in the aforementioned shape of ``x``.
-        :type x: :class:`tensorfflow.Tensor`
-        :return: x_new (:class:`tensorfflow.Tensor`) - The rotated version of ``x`` with same shape.
+        :type x: :py:class:`tensorfflow.Tensor`
+        :return: x_new (:py:class:`tensorfflow.Tensor`) - The rotated version of ``x`` with same shape.
         """
 
         # Convenience variables
@@ -820,7 +913,7 @@ class Reflection(FlowLayer):
         dimension_count = self.__reflection_normals__.shape[1]
 
         # Ensure reflection normal is of unit length 
-        self.__reflection_normals__.assign(tf.math.l2_normalize(self.__reflection_normals__, axis=1))
+        #self.__reflection_normals__.assign(tf.math.l2_normalize(self.__reflection_normals__, axis=1))
 
         # Pass x through the sequence of reflections
         x_new = x
@@ -890,55 +983,10 @@ class Reflection(FlowLayer):
         # Outputs
         return logarithmic_determinant
 
-class SequentialFlowNetwork(FlowLayer):
-    """This network manages flow through several :class:`FlowLayer` objects in a single path sequential way.
-    
-    :param sequence: A list of layers.
-    :type sequence: List[:class:`FlowLayer`]
-    """
-
-    def __init__(self, sequence: List[FlowLayer], **kwargs):
-        
-        # Super
-        super(SequentialFlowNetwork, self).__init__(shape=[], axes=[], **kwargs) # Shape and axes are set to empty lists here because the individual layers may have different shapes and axes of
-        
-        # Attributes
-        self.sequence = sequence
-        """(List[:class:`FlowLayer`]) - Stores the sequence of flow layers through which the data shall be passed."""
-
-    def call(self, x: tf.Tensor) -> tf.Tensor:
-        
-        # Transform
-        for layer in self.sequence: x = layer(x=x)
-        y_hat = x
-
-        # Outputs
-        return y_hat
-    
-    def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
-        
-        # Transform
-        for layer in reversed(self.sequence): y_hat = layer.invert(y_hat=y_hat)
-        x = y_hat
-
-        # Outputs
-        return x
-
-    def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
-        
-        # Transform
-        logarithmic_determinant = 0
-        for layer in self.sequence: 
-            logarithmic_determinant += layer.compute_jacobian_determinant(x=x) 
-            x = layer(x=x)
-            
-        # Outputs
-        return logarithmic_determinant
-
-class SupervisedFactorNetwork(SequentialFlowNetwork):
-    """This network is a :class:`SequentialFlowNetwork` that can be used to disentangle factors, e.g. to understand representations
-    in latent spaces of regular neural networks. It automatically uses the :class:`losses.SupervisedFactorLoss` to compute its losses.
-    It also overrides the :class:`FlowLayer`'s implementation for train_step to accomodate for the fact that calibration does not
+class SupervisedFactorModel(FlowModel):
+    """This network is a :py:class:`FlowModel` that can be used to disentangle factors, e.g. to understand representations
+    in latent spaces of regular neural networks. It automatically uses the :py:class:`losses.SupervisedFactorLoss` to compute its losses.
+    It also overrides the :py:class:`FlowModel`'s implementation for train_step to accomodate for the fact that calibration does not
     simply use single instances but pairs of instances and their similarity.
     
     :param sigma: A measure of how tight clusters in the output space shall be. It is used to set up the factorized loss.
@@ -949,8 +997,8 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
        - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
     
-    def __init__(self, sequence: List[FlowLayer], dimensions_per_factor: List[int], sigma: float = 0.975, **kwargs):
-        super().__init__(sequence=sequence, **kwargs)
+    def __init__(self, layers: List[FlowLayer], dimensions_per_factor: List[int], sigma: float = 0.975, **kwargs):
+        super().__init__(layers, **kwargs)
         self.__dimensions_per_factor__ = cp.copy(dimensions_per_factor) 
         self.__sigma__ = sigma
         """(List[int]) - A list that indicates for each factor (matched by index) how many dimensions are used."""
@@ -968,10 +1016,10 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
         :param Z_ab: A sample of input instances, arranged in pairs. These instances shall be drawn from the same propoulation as 
             the inputs to this flow model during inference, yet flattened. Shape == [instance count, 2, dimension count], where 2 
             is due to pairing. 
-        :type Z_ab: :class:`numpy.ndarray`
+        :type Z_ab: :py:class:`numpy.ndarray`
         :param Y_ab: The factor-wise similarity of instances in each pair of ``Z_ab``. **IMPORTANT:** Here, it is assumed that the 
             residual factor is at index 0 AND that the values of ``Y_ab`` are either 0 or 1. Shape == [instance count, factor count].
-        :type Y_ab: :class:`numpy.ndarray`
+        :type Y_ab: :py:class:`numpy.ndarray`
 
         :return:
             - dimensions_per_factor (List[int]) - The number of dimensions per factor (including the residual factor), summing up to the dimensionality of ``Z``. Ordering is the same is in ``Y_ab``.
@@ -1015,7 +1063,7 @@ class SupervisedFactorNetwork(SequentialFlowNetwork):
             2, ...] where 2 indicates the pair x_a, x_b of same factor and ... is the shape of one input instance that has to fit 
             through :py:attr:`self.sequence`. The tensorflow.Tensor Y shall contain the factor indices of shape [batch size].
         :type data: Tuple(tensorflow.Tensor, tensorflow.Tensor)
-        :return: loss (:class:`tensorflow.Tensor`) - A scalar for the loss observed before applying the train step.
+        :return: loss (:py:class:`tensorflow.Tensor`) - A scalar for the loss observed before applying the train step.
         """
         
         # Ensure loss exists

@@ -1,4 +1,4 @@
-import gyoza.modelling.data_iterators as mdis
+import gyoza.tutorials.data_iterators as mdis
 import unittest
 import tensorflow as tf
 from typing import List, Tuple

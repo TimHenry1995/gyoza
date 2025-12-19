@@ -183,7 +183,7 @@ class CheckerBoard(Mask):
         
         # Set up mask
         mask = np.zeros(shape) 
-        dimension_count = np.product(shape)
+        dimension_count = np.prod(shape)
         current_indices = [0] * len(shape)
         mask[tuple(current_indices)] = np.sum(current_indices) % 2
         for d in range(dimension_count):

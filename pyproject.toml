@@ -7,7 +7,7 @@ where = ["src"]
 
 [project]
 name = "gyoza"
-version = "0.2.2"
+version = "0.2.3"
 authors = [
   { name="Tim Dick" },
 ]
@@ -21,12 +21,19 @@ classifiers = [
 ]
 dependencies = [
     "tensorflow >= 2.9",
-    "matplotlib >= 3.5.3",
-    "sphinx == 5.2.3",
-    "sphinx-rtd-theme",
     "numpy >= 1.21.6",
-    "build<0.10.0",
-    "twine"
+    
+]
+
+[project.optional-dependencies]
+build = [
+  "build<0.10.0",
+  "twine",
+  "sphinx == 5.2.3",
+  "sphinx-rtd-theme",
+  ]
+tutorials = [
+  "matplotlib >= 3.5.3"
 ]
 
 [project.urls]

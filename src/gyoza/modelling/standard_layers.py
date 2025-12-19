@@ -9,9 +9,6 @@ class BasicFullyConnectedNet(tf.keras.Model):
     :param int output_dimension_count: The number of dimensions of the final layer.
     :param int depth: The number of layers to be used in between the input and output. If set to 0, there will only be a single 
         layer mapping from input to output. If set to 1, then there will be 1 intermediate layer, etc. 
-    :param bool, optional use_tanh: Indicates whether each layer shall use the hyperbolic tangent activaction function. If set to False, 
-        then a leaky relu is used. Defaults to False.
-    :param bool, optional use_batch_normalization: Indicates whether each layer shall use batch normalization or not. Defaults to False.
     """
 
     def __init__(self, latent_dimension_count:int, output_dimension_count:int, depth: int):

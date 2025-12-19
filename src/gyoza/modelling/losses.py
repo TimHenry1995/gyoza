@@ -3,8 +3,6 @@ import numpy as np
 from typing import List, Tuple
 import copy as cp
 
-class UnsupervisedFactorLoss():
-    pass
 
 class SupervisedFactorLoss(tf.keras.losses.Loss):
     r"""
@@ -73,9 +71,9 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
             what extent the two instances from ``z_tilde_a`` and ``z_tilde_b`` share this factor. Similarity is assumed to be in the 
             range [0,1]. If the factors are all categorical, it makes sense to set these similarities either to 1 or 0, indicating 
             same class or not, respectviely. E.g. if there are two factors and 3 pairs of z_tilde, then ``y_true`` could be 
-            [[0,1],[0,0],[0,1]], indicating that the first and last pairs of z_tilde share the concept of factor at index 1 and 
-            the second pair does not have anything in common. The residual factor (located at index 0) is typically not the same for
-            any two instances and thus usually stores a zero in this array. The hyperparameter sigma (typically close to 1) should be 
+            [[0,1],[0,0],[0,1]], indicating that the first pair of z_tilde shares the concept of factor at index 1, 
+            the second pair does not have anything in common and the third pair behaves like the first. The residual factor (located 
+            at index 0) is typically not the same for any two instances and thus usually stores a zero in this array. The hyperparameter sigma (typically close to 1) should be 
             set to reflect the category resemblance of instances. 
         :type y_true: :class:`tensorflow.Tensor`
         :param y_pred: A tuple containing [z_tilde_a, z_tilde_b, j_a, j_b]. 
@@ -106,52 +104,38 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
         assert len(y_true.shape) == 2, f"The input y_true is expected to have shape [batch size, factor count], but has shape {y_true.shape}."
         assert y_true.shape[0] == z_tilde_a.shape[0], f"The inputs y_true and z_tilde are assumed to have the same number of instances in the batch. Found {y_true.shape[0]} and {z_tilde_a.shape[0]}, respectively."
         
+        # Equations
+        # L = -ln(p(z_a, z_b))
+        #   = -ln(p(z_a) * p(z_b| z_a))
+        #   = -ln(p(z_tilde_a) * |T'(z_a)| * p(z_tilde_b | z_tilde_a) * |T'(z_b)|)
+        #   = -ln(p(z_tilde_a)) - j_a - ln(p(z_tilde_b | z_tilde_a)) - j_b
+
+        # ln(p(z_tilde_a)) = - 1/2 z_tilde_a^T z_tilde_a, since muh = 0 and sigma = 1
+        # ln(p(z_tilde_b | z_tilde_a)) = -1/2 (z_tilde_b - y_true_N * z_tilde_a)^T matmul ( (z_tilde_b - y_true_N * z_tilde_a) / (1-y_true_N^2))
+        # Here, y_true_N is the y_true matrix casted to shape [batch_size, dimension_count] and it specifies for each dimension the similarity rating for the corresponding factor
+        
         # Convenience variables
         batch_size, factor_count = y_true.shape
         dimension_count =  z_tilde_a.shape[1] 
         
-        # Implement formula (10) of referenced paper
-        # L = sum_{F=1}^K expected_value_{x^a,x^b ~ p(x^a, x^b | F)} l(E(x^a), E(x^b)| F)       (term 10)
-        # l(z^a, z^b | F) = 0.5 * sum_{k=0}^K ||T(z^a)_k||^2 - log|T'(z^a)|                     (term 7) 
-        #                 + 0.5 * sum_{k != F} ||T(z^b)_k||^2 - log|T'(z^b)|                    (term 8) 
-        #                 + 0.5 * ( || T(z^b)_F - sigma_{ab} T(z^a)_F || ^2) / (1-sigma_{ab}^2) (term 9) 
-        # NOTE: The authors forgot the multiplier 0.5 in front. Since it is not applied to each entire term, it does make a difference for the final result 
+        # Prepare matrices
+        y_true_N = tf.zeros(shape=[batch_size, dimension_count], dtype=tf.keras.backend.floatx())
+        for f in range(factor_count):
+            y_true_N += self.__factor_masks__[f:f+1] * y_true[:,f:f+1]
 
-        # Iterate factors (according to term 10)
-        loss = 0
-        for f in range(1, factor_count): # Excludes residual factor
-            # Mask out the instances that do not have the same class for the current factor
-            # because they are not relevant for the current iteration across factors
-            f_z_tilde_a = y_true[:,f:f+1] * z_tilde_a 
-            f_z_tilde_b = y_true[:,f:f+1] * z_tilde_b
-
-            # This one leads points f_z_tilde_a to be multivariate normal
-            term_7 = 0.5 * tf.reduce_sum(tf.pow(f_z_tilde_a, 2), axis=1) - y_true[:,f:f+1]*j_a # Shape == [batch size]
-            
-            # This leads points b to be normal along all other factor than f
-            term_8 = 0
-            for f_other in range(0, factor_count): # Includes residual factor
-                if f_other != f: 
-                    factor_mask = tf.repeat(self.__factor_masks__[f_other,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
-                    term_8 += 0.5 * tf.reduce_sum(factor_mask * tf.pow(f_z_tilde_b, 2), axis=1)  # Shape == [batch size]
-            term_8 -= y_true[:,f:f+1]*j_b
-            
-            # This leads points a and b (if they are labelled similar for current factor) to be close to each other
-            factor_mask = tf.repeat(self.__factor_masks__[f,:][tf.newaxis,:], repeats=batch_size, axis=0) # shape == [batch_size, dimension_count]
-            term_9 = 0.5 * tf.reduce_sum(factor_mask * tf.pow(f_z_tilde_b - self.__sigma__ * f_z_tilde_a, 2) / (1.0-(y_true[:,f:f+1] * self.__sigma__)**2 + 1e-5), axis=1) # Shape == [batch size], 1e-5 to prevent division by 0
+        # Compute -ln(p(z_tilde_a))
+        term_1 = -0.5 * tf.squeeze(tf.linalg.matmul(tf.reshape(z_tilde_a, [batch_size, 1, dimension_count]), tf.reshape(z_tilde_a, [batch_size, dimension_count, 1])))  # Shape = [batch_size]
         
-            # Take mean across instances and add to the total loss (according to term 10)
-            instance_weight = 1.0-tf.reduce_sum(y_true[:,f]).numpy()/tf.reduce_sum(y_true).numpy() # To pretend each factor got an equal number of pairs, we apply a weight based on pair count
-            loss += instance_weight*tf.reduce_sum(term_7 + term_8 + term_9, axis=0)/tf.reduce_sum(y_true[:,f]) # Shape == [1]
-            
-            # For the instances that are not the same along the current factor dimension, just let them be normally distributed without correlation
-            f_z_tilde_a = (1-y_true[:,f:f+1]) * z_tilde_a 
-            f_z_tilde_b = (1-y_true[:,f:f+1]) * z_tilde_b
-            term_7 = 0.5 * tf.reduce_sum(tf.pow(f_z_tilde_a, 2), axis=1) - (1-y_true[:,f:f+1])*j_a # Shape == [batch size]
-            term_8 = 0.5 * tf.reduce_sum(tf.pow(f_z_tilde_b, 2), axis=1) - (1-y_true[:,f:f+1])*j_b # Shape == [batch size]
-            instance_weight = 1.0-tf.reduce_sum((1-y_true[:,f])).numpy()/tf.reduce_sum(1-y_true).numpy() # To pretend each factor got an equal number of pairs, we apply a weight based on pair count
-            loss += instance_weight*tf.reduce_sum(term_7 + term_8, axis=0)/tf.reduce_sum(1-y_true[:,f]) # Shape == [1]
-           
+        # Compute -ln(p(z_tilde_b | z_tilde_a)) 
+        tmp_1 = (z_tilde_b - y_true_N * z_tilde_a) # Shape = [batch_size, dimension_count]
+        tmp_2 = (z_tilde_b - y_true_N * z_tilde_a) / (1-(self.__sigma__*y_true_N)**2 + 1e-05) # Shape = [batch_size, dimension_count], scale y_true_N for stability
+        term_2 = -0.5 * tf.squeeze(tf.linalg.matmul(tf.reshape(tmp_1, [batch_size, 1, dimension_count]), tf.reshape(tmp_2, [batch_size, dimension_count, 1])))  # Shape = [batch_size]
+        
+        # Compute L
+        loss = - term_1 - j_a - term_2 - j_b # Shape == [batch_size]
+        loss = tf.reduce_mean(loss) # Scalar
 
         # Outputs
         return loss
+        
+        

@@ -3,7 +3,7 @@ import numpy as np
 from typing import Callable, List, Tuple
 import tensorflow as tf
 from matplotlib.backends.backend_agg import FigureCanvasAgg
-from gyoza.modelling import flow_layers as mfl
+from gyoza.modelling import flow_layers as gmfl
 from gyoza.tutorials import data_synthesis as gtd
 
 def __make_color_palette__() -> np.ndarray:
@@ -194,14 +194,16 @@ def make_color_wheel(pixels_per_inch: int, pixel_count: int = 128, swirl_strengt
     # Outputs
     return image
 
-def plot_instance_pairs(S: np.ndarray, Z_ab: np.ndarray, Y_ab: np.ndarray, manifold_function: Callable, manifold_name: str, pair_count: int=3):
+def plot_instance_pairs(S: np.ndarray, Z_a: np.ndarray, Z_b: np.ndarray, Y_ab: np.ndarray, manifold_function: Callable, manifold_name: str, pair_count: int=3):
     """Plots pairs of instances along with their similarities and the manifold (without noise).
 
     :param S: The position along the manifold. Shape == [:math:`M`, 1], where :math:`M` is the number of instances.
     :type S: np.array
-    :param Z_ab: The coordinates of the instances to be plotted. Shape is assumed to be [:math:`M`, 2, :math:`N`], where :math:`M` is the number
-        of instances, the 2 at axis 1 enumerates the two instances of the pair and :math:`N = 2` is the dimensionality of an instance.
-    :type Z_ab: :class:`numpy.ndarray`
+    :param Z_a: The coordinates of the a-instances to be plotted. Shape is assumed to be [:math:`M`, :math:`N`], where :math:`M` is the number
+        of instances and :math:`N = 2` is the dimensionality of an instance.
+    :type Z_a: :class:`numpy.ndarray`
+    :param Z_b: The same as Z_a, but for b-instances.
+    :type Z_b: :class:`numpy.ndarray`
     :param Y_ab: The similarities of the ``Z_ab`` instances. Shape is assumed to be [:math:`M`, :math:`F`], where :math:`M` is the number of
         instances and :math:`F=2` at axis 1 is the factor count.
     :type Y_ab: :class:`numpy.ndarray`
@@ -219,10 +221,10 @@ def plot_instance_pairs(S: np.ndarray, Z_ab: np.ndarray, Y_ab: np.ndarray, manif
     plt.figure(figsize=(3.5,3.5)); plt.title(rf"Noisy Instances, Pairs and Similarities (s) for ${manifold_name}$")
 
     # Plot instance pairs
-    individual_Z = np.reshape(Z_ab, [len(Z_ab)*2, 2])
+    individual_Z = np.concatenate([Z_a, Z_b], axis=1)
     plt.scatter(individual_Z[:,0], individual_Z[:,1], c='lightgray')
-    plt.scatter(Z_ab[:pair_count,0,0], Z_ab[:pair_count,0,1]) # Instances a
-    plt.scatter(Z_ab[:pair_count,1,0], Z_ab[:pair_count,1,1]) # Instances b
+    plt.scatter(Z_a[:pair_count,0], Z_a[:pair_count,1]) # Instances a
+    plt.scatter(Z_b[:pair_count,0], Z_b[:pair_count,1]) # Instances b
     
     # Plot manifold
     plt.scatter(*manifold_function(S), color='gray', marker='.', s=1)
@@ -233,21 +235,23 @@ def plot_instance_pairs(S: np.ndarray, Z_ab: np.ndarray, Y_ab: np.ndarray, manif
     # Plot lines that connect the two instances of a pair
     s_max = np.max(S)
     for i in range(pair_count): # Iterate instances
-        plt.plot([Z_ab[i,0,0], Z_ab[i,1,0]], [Z_ab[i,0,1], Z_ab[i,1,1]], '--', color='black')
-        plt.text(Z_ab[i,1,0]+0.1, Z_ab[i,1,1], 's = ' + str(np.round(Y_ab[i,1], 3))) # Label for their similarity
+        plt.plot([Z_a[i,0], Z_b[i,0]], [Z_a[i,1], Z_b[i,1]], '--', color='black')
+        plt.text(Z_b[i,0]+0.1, Z_b[i,1], 's = ' + str(np.round(Y_ab[i,1], 3))) # Label for their similarity
     plt.gca().set_aspect('equal')
     #plt.ylim(-s_max/0.8,s_max/0.8); plt.xlim(-s_max/0.8,s_max/0.8)
 
     plt.xlabel('First Dimension'); plt.ylabel('Second Dimension')
     plt.show()
 
-def plot_instance_pairs_2(Z_ab: np.ndarray, title_suffix: str = rf"$Z$"):
+def plot_instance_pairs_2(Z_a: np.ndarray, Z_b: np.ndarray, title_suffix: str = rf"$Z$"):
     """Plots the instance pairs of Z_ab (or Z_tilde_ab) in two scatter plots. The first scatter plot shows the first dimension (index 0) of instance a and b while the second scatter plot shows the second dimension (index 1) of instances a and b.
     In the margins of each scatter plot, the marginal histograms are shown.
     
-    :param Z_ab: The coordinates of the instances to be plotted. This can be from the Z-space of the Z_tilde-space. Shape is assumed to be [:math:`M`, 2, :math:`N`], where :math:`M` is the number
-        of instances, the 2 at axis 1 enumerates the two instances (a,b) of the pair and :math:`N = 2` is the dimensionality of an instance.
-    :type Z_ab: :class:`numpy.ndarray`
+    :param Z_a: The coordinates of the a-instances to be plotted. Shape is assumed to be [:math:`M`, :math:`N`], where :math:`M` is the number
+        of instances and :math:`N = 2` is the dimensionality of an instance.
+    :type Z_a: :class:`numpy.ndarray`
+    :param Z_b: The same as Z_a, but for b-instances.
+    :type Z_b: :class:`numpy.ndarray`
     :param title_suffix: The suffix to be added to the title, usually a string 'Z' to indicate that instances come from the Z-space or rf'$\tilde{Z}$' to indicate that they come from the Z_tilde-space.
     :type title_suffix: str, optional, defaults to rf'$Z$'
     """
@@ -260,16 +264,16 @@ def plot_instance_pairs_2(Z_ab: np.ndarray, title_suffix: str = rf"$Z$"):
     for d in range(2):
         plt.subplot(2,4,d*2+2)
         plt.title(("First" if d==0 else "Second") + " Dimension ")
-        plt.scatter(Z_ab[:,0,d], Z_ab[:,1,d], s=0.5, c='k')
+        plt.scatter(Z_a[:,d], Z_b[:,d], s=0.5, c='k')
         plt.xlabel(f"Instance a"); plt.ylabel(f"Instance b")
         Z_a_0_lim, Z_b_0_lim = plt.xlim(), plt.ylim()
-        plt.legend([f"r = {np.round(np.corrcoef(Z_ab[:,0,d], Z_ab[:,1,d])[0,1], 3)}"])
+        plt.legend([f"r = {np.round(np.corrcoef(Z_a[:,d], Z_b[:,d])[0,1], 3)}"])
 
         # Histograms
         plt.subplot(2,4,d*2+6)
-        plt.hist(Z_ab[:,0,d], histtype='step', color='k'); plt.xlim(Z_a_0_lim); plt.gca().invert_yaxis(); plt.axis('off')
+        plt.hist(Z_a[:,d], histtype='step', color='k'); plt.xlim(Z_a_0_lim); plt.gca().invert_yaxis(); plt.axis('off')
         plt.subplot(2,4,d*2+1)
-        plt.hist(Z_ab[:,1,d], orientation='horizontal', histtype='step', color='k'); plt.ylim(Z_b_0_lim); plt.gca().invert_xaxis(); plt.axis('off')
+        plt.hist(Z_b[:,d], orientation='horizontal', histtype='step', color='k'); plt.ylim(Z_b_0_lim); plt.gca().invert_xaxis(); plt.axis('off')
 
         # Disable corner subplot
         plt.subplot(2,4,d*2+5); plt.axis('off')
@@ -305,7 +309,7 @@ def plot_loss_trajectory(epoch_loss_means: List[float], epoch_loss_standard_devi
     # Labels
     plt.xlabel('Epoch'); plt.ylabel('Loss'); plt.legend([r'$\pm 2*$ Standard Error', 'Mean Across Batches'])
 
-def plot_input_output(network: mfl.SupervisedFactorModel, S, manifold_function: Callable, noise_standard_deviation: float, manifold_name: str, zoom_output: bool=False):
+def plot_input_output(network: gmfl.FlowModel, S, manifold_function: Callable, noise_standard_deviation: float, manifold_name: str, zoom_output: bool=False):
     """Plots the input and output to the ``network``. Points are colored using a color wheel. Supplementary marginal distribution are provided.
 
     :param network: The network that shall process the data. It is expected to map from [:math:`M`,:math:`N`] to [:math:`M`,:math:`N`], where
@@ -363,9 +367,9 @@ def plot_input_output(network: mfl.SupervisedFactorModel, S, manifold_function: 
 
     # 1.2 Z tilde
     plt.subplot(2,4,4); plt.title("Output")
-    Z_tilde = network(Z)
-    H_Z_tilde = network(tf.concat([np.reshape(h_x_1, [-1])[:,np.newaxis], np.reshape(h_x_2, [-1])[:,np.newaxis]], axis=1))
-    V_Z_tilde = network(tf.concat([np.reshape(v_x_1, [-1])[:,np.newaxis], np.reshape(v_x_2, [-1])[:,np.newaxis]], axis=1))
+    Z_tilde, _ = network(Z)
+    H_Z_tilde, _ = network(tf.concat([np.reshape(h_x_1, [-1])[:,np.newaxis], np.reshape(h_x_2, [-1])[:,np.newaxis]], axis=1))
+    V_Z_tilde, _ = network(tf.concat([np.reshape(v_x_1, [-1])[:,np.newaxis], np.reshape(v_x_2, [-1])[:,np.newaxis]], axis=1))
     
     # 1.2.1 Gridlines
     for l in range(points_per_line): plt.plot(H_Z_tilde[l*points_per_line:(l+1)*points_per_line,0], H_Z_tilde[l*points_per_line:(l+1)*points_per_line,1], color='#C5C9C7', linewidth=0.75)
@@ -398,7 +402,7 @@ def plot_input_output(network: mfl.SupervisedFactorModel, S, manifold_function: 
     plt.tight_layout()
     plt.show()
 
-def evaluate_and_plot_networks(Z_test: List[np.ndarray], Y_test: List[np.ndarray], networks: List[mfl.SupervisedFactorModel], manifold_name: str):
+def evaluate_and_plot_networks(Z_test: List[np.ndarray], Y_test: List[np.ndarray], networks: List[gmfl.FlowModel], manifold_name: str):
     """For each network, a scatter plot for the predicted and actual position along the manifold is plotted along with a bar for the proportion
     of explained variance.
 
@@ -455,7 +459,7 @@ def evaluate_and_plot_networks(Z_test: List[np.ndarray], Y_test: List[np.ndarray
 
     plt.show()
 
-def plot_inverse_point(position: float, residual: float, S: np.ndarray, network: mfl.SupervisedFactorModel, manifold_function: Callable, manifold_name: str):
+def plot_inverse_point(position: float, residual: float, S: np.ndarray, network: gmfl.FlowModel, manifold_function: Callable, manifold_name: str):
     """This function visualizes the ``network``'s inversion ability by plotting the inverse of the point[``residual``, ``position``]. It also
     plots the ``manifold_function`` on input ``S`` for reference.
 
@@ -493,7 +497,7 @@ def plot_inverse_point(position: float, residual: float, S: np.ndarray, network:
     plt.xlabel('First Dimension'); plt.ylabel('Second Dimension')
     plt.show()
 
-def plot_contribution_per_layer(network: mfl.FlowModel, s_range: Tuple[float, float], manifold_function: Callable, manifold_name:str, layer_steps: List[int], step_titles: List[str]):
+def plot_contribution_per_layer(network: gmfl.FlowModel, s_range: Tuple[float, float], manifold_function: Callable, manifold_name:str, layer_steps: List[int], step_titles: List[str]):
     """Plots for each layer (or rather step of consecutive layers) the contribution to the data transformation. The plot is strucutred into three rows.
     The first row shows a stacked bar chart whose bottom segment is the contribution due to affine transformation and the top segment is the contribution
     due to higher order transformation. To better understand the mechanisms behind these contributions there is a pictogram in the bottom row for the

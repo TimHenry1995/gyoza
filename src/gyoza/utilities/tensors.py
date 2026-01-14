@@ -58,7 +58,7 @@ def expand_axes(x: tf.Tensor, axes) -> tf.Tensor:
         new_shape[axis] = x.shape[o]
         o += 1
 
-    x_new = tf.reshape(x, new_shape)
+    x_new = tf.keras.ops.reshape(x, new_shape)
 
     # Outputs
     return x_new
@@ -76,14 +76,14 @@ def flatten_along_axes(x: tf.Tensor, axes: List[int]) -> tf.Tensor:
     if len(axes) == 0: return x
 
     # Reshape
-    new_shape = list(x.shape)
+    new_shape = list(tf.keras.ops.shape(x))
 
     new_shape[axes[0]] = 1
-    for a in axes: new_shape[axes[0]] *= x.shape[a]
+    for a in axes: new_shape[axes[0]] *= tf.keras.ops.shape(x)[a]
     axes = cp.copy(axes); axes.reverse()
     for a in axes[:-1]: del new_shape[a]
 
-    x_new = tf.reshape(x, new_shape) # Now has original shape except for axes which have been flattened
+    x_new = tf.keras.ops.reshape(x, newshape=new_shape) # Now has original shape except for axes which have been flattened
 
     # Outputs
     return x_new
@@ -105,7 +105,7 @@ def swop_axes(x: tf.Tensor, from_axis: int, to_axis: int) -> tf.Tensor:
     tmp = axes[to_axis]
     axes[to_axis] = axes[from_axis]
     axes[from_axis] = tmp
-    x_new = tf.transpose(x, perm=axes)
+    x_new = tf.keras.ops.transpose(x, axes=axes)
 
     # Outputs
     return x_new 

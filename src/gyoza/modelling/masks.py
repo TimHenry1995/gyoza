@@ -23,24 +23,24 @@ class Mask(tf.keras.Model, ABC):
         # Super
         super(Mask, self).__init__()
 
-        self.__axes__ = cp.copy(axes)
+        self._axes_ = cp.copy(axes)
         """(:class:`List[int]`) - The axes along which the selection shall be applied."""
 
-        self.__shape__ = cp.copy(shape)
+        self._shape_ = cp.copy(shape)
         """(:class:`List[int]`) - The shape that input :math:`x` to this layer has along ``axes``."""
 
         mask = tf.cast(mask, dtype=tf.keras.backend.floatx())
-        mask = tf.reshape(mask, [-1]) # Ensure it is flattened
-        self.__mask__ = mask
+        mask = tf.keras.ops.reshape(mask, newshape=[-1]) # Ensure it is flattened
+        self._mask_ = mask
         """(:class:`tensorflow.Tensor) - The mask to be applied to input :math:`x` to this layer."""
 
-        self.__from_to__ = Mask.__compute_from_to__(mask=mask)
+        self.__from_to__ = Mask._compute_from_to_(mask=mask)
         """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
 
         self.built = True # This is set to prevent a warning saying that serialzation for mask is skipped becuase mask is not built
 
     @staticmethod
-    def __compute_from_to__(mask: tf.Tensor) -> tf.Tensor:
+    def _compute_from_to_(mask: tf.Tensor) -> tf.Tensor:
         """Sets up a matrix that can be used to arrange all elements of an input x (after flattening) such the ones marked with a 1 
         by the mask appear first while the ones marked with a zero occur last.
         
@@ -74,23 +74,23 @@ class Mask(tf.keras.Model, ABC):
         """
 
         # Set parity of mask
-        if is_positive: mask = self.__mask__
-        else: mask = 1 - self.__mask__
+        if is_positive: mask = self._mask_
+        else: mask = 1 - self._mask_
         
-        # Flatten x along self.__axes__ 
-        x_old_shape = cp.copy(x.shape)
-        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+        # Flatten x along self._axes_ 
+        x_old_shape = cp.copy(tf.keras.ops.shape(x))
+        x = utt.flatten_along_axes(x=x, axes=self._axes_)
 
         # Reshape mask
         axes = list(range(len(x.shape)))
-        axes.remove(self.__axes__[0])
-        mask = utt.expand_axes(x=mask, axes=axes) # Now has same shape as flat x along self.__axes__[0] and singleton everywhere else
+        axes.remove(self._axes_[0])
+        mask = utt.expand_axes(x=mask, axes=axes) # Now has same shape as flat x along self._axes_[0] and singleton everywhere else
         
         # Mask
         x_masked = x * mask
 
         # Unflatten to restore original shape
-        x_masked = tf.reshape(x_masked, shape=x_old_shape)
+        x_masked = tf.keras.ops.reshape(x_masked, newshape=x_old_shape)
         
         # Outputs
         return x_masked
@@ -102,20 +102,20 @@ class Mask(tf.keras.Model, ABC):
         :param x: The data to be arranged. The shape is assumed to be compatible with :py:meth:`mask`.
         :type x: :class:`tensorflow.Tensor`
         :return: x_flat (:class:`tensorflow.Tensor`) - The arranged version of ``x`` whose shape is flattened along the first axis
-            of attribute :py:attr:`__axes__`.
+            of attribute :py:attr:`_axes_`.
         """
         
-        # Flatten x along self.__axes__ to fit from_to 
-        x = utt.flatten_along_axes(x=x, axes=self.__axes__)
+        # Flatten x along self._axes_ to fit from_to 
+        x = utt.flatten_along_axes(x=x, axes=self._axes_)
 
-        # Move self.__axes__[0] to end
-        x = utt.swop_axes(x=x, from_axis=self.__axes__[0], to_axis=-1)
+        # Move self._axes_[0] to end
+        x = utt.swop_axes(x=x, from_axis=self._axes_[0], to_axis=-1)
 
         # Matrix multiply
         x_new = tf.linalg.matvec(tf.transpose(self.__from_to__, perm=[1,0]), x)
 
         # Move final axis to self.__axis__[0]
-        x_new = utt.swop_axes(x=x_new, from_axis=-1, to_axis=self.__axes__[0])
+        x_new = utt.swop_axes(x=x_new, from_axis=-1, to_axis=self._axes_[0])
 
         # Output
         return x_new
@@ -128,18 +128,18 @@ class Mask(tf.keras.Model, ABC):
         
         :return: x (tensorflow.Tensor) - The input to :py:meth:`arrange`."""
 
-        # Move self.__axes__[0] to end
-        x_new = utt.swop_axes(x=x_new, from_axis=self.__axes__[0], to_axis=-1)
+        # Move self._axes_[0] to end
+        x_new = utt.swop_axes(x=x_new, from_axis=self._axes_[0], to_axis=-1)
         
         # Matrix multiply
         x = tf.linalg.matvec(self.__from_to__, x_new)
         
         # Move final axis to self.__axis__[0]
-        x = utt.swop_axes(x=x, from_axis=-1, to_axis=self.__axes__[0])
+        x = utt.swop_axes(x=x, from_axis=-1, to_axis=self._axes_[0])
 
-        # Unflatten along self.__axes__
-        old_shape = x.shape[:self.__axes__[0]] + self.__shape__ + x.shape[self.__axes__[0]+1:]
-        x = tf.reshape(x, shape=old_shape)
+        # Unflatten along self._axes_
+        old_shape = x.shape[:self._axes_[0]] + self._shape_ + x.shape[self._axes_[0]+1:]
+        x = tf.keras.ops.reshape(x, newshape=old_shape)
 
         # Outputs
         return x
@@ -168,11 +168,9 @@ class Heaviside(Mask):
         super(Heaviside, self).__init__(axes=axes, shape=shape, mask=mask)
 
 class CheckerBoard(Mask):
-    """Applies a `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_ pattern to its input. Observe that it is equivalent 
-    to :class:`SquareWave` when ``shape`` == :math:`[m,n]` and :math:`n` is odd. Yet, when :math:`n` is even, :class:`SquareWave` has
-    columns of zeros alternating with columns of ones, whereas :class:`CheckerBoard` ensures a proper checker board pattern.
+    """A mask of ones and zeros arranged in a `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_ . 
         
-    :param axes: The **two** axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
+    :param axes: The axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
         [2,3] or [3,4].
     :type axes: :class:`List[int]`
     :param shape: The shape of the mask along ``axes``, e.g. 64*32 if an input :math:`x` has shape [10,3,64,32] and ``axes`` == [2,3].

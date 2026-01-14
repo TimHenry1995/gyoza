@@ -102,7 +102,7 @@ def factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, batch_size: int, targ
         
         # Choose random X_a instances
         a_indices = np.random.randint(low=0, high=instance_count, size=batch_size)
-        X_a = tf.cast(X[a_indices,:], tf.keras.backend.floatx())[:, tf.newaxis, :]
+        X_a = tf.cast(X[a_indices,:], tf.keras.backend.floatx())
         Y_a = Y[a_indices]
 
         # Compute hypothetical y_b instances
@@ -116,6 +116,6 @@ def factorized_pair_iterator(X: np.ndarray, Y: np.ndarray, batch_size: int, targ
                 X_b[i] = X[b_index]
             except Exception as error:
                 print(i, b_index, error)
-        X_ab = tf.concat([X_a, X_b], axis=1) # Concatenate along pair axis
+        X_b = tf.cast(X_b, dtype=tf.keras.backend.floatx())
         
-        yield X_ab, Y_ab
+        yield (X_a, X_b), Y_ab

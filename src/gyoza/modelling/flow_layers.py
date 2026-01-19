@@ -9,6 +9,7 @@ import copy as cp
 from gyoza.modelling import losses as mls
 import random
 
+@tf.keras.utils.register_keras_serializable()
 class FlowModel(tf.keras.Model):
     """A class for flow models. It subclasses :py:class:`tensorflow.keras.Model` and assumes a list of flow-layers as input
     which will always be executed in the given sequence.
@@ -17,10 +18,10 @@ class FlowModel(tf.keras.Model):
     :type flow_layers: List[:py:class:`FlowLayer`]"""
 
 
-    def __init__(self, flow_layers):
+    def __init__(self, flow_layers, **kwargs) -> "FlowModel":
         
         # Super
-        super().__init__()
+        super().__init__(**kwargs)
         
         # Input validity
         assert all([isinstance(layer, FlowLayer) for layer in flow_layers]), f"The input `layers` provided to the FlowModel needs to be an array of FlowLayers but was {[type(layer) for layer in flow_layers]}."
@@ -45,17 +46,19 @@ class FlowModel(tf.keras.Model):
 
         :param inputs: The data to be tranformed. Assumed to be of shape [batch size, ...].
         :type inputs: :py:class:`tensorflow.Tensor`
-        :return: y_hat (:py:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""
-
+        :param return_execution_mode: If True, the execution mode ('eager' or 'graph') is returned as third output.
+        :type return_execution_mode: bool, optional, defaults to False
+        :return: (y_hat, jacobian_determinant) (Tuple[:py:class:`tensorflow.Tensor`, :py:class:`tensorflow.Tensor`]) - The output y_hat of the transformation of shape [batch size, ...] and the Jacobian determinant on logarithmic scale of shape [batch size]."""
+        
         # Transform
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(inputs, axis=list(range(1, len(tf.keras.ops.shape(inputs)))))
+        jacobian_determinant = 0.0 * tf.keras.ops.sum(inputs, axis=list(range(1, len(tf.keras.ops.shape(inputs)))))
         y_hat = inputs
         for layer in self.flow_layers:
-            y_hat, logarithmic_determinant_l = layer(inputs=y_hat)
-            logarithmic_determinant += logarithmic_determinant_l
+            y_hat, jacobian_determinant_l = layer(inputs=y_hat)
+            jacobian_determinant += jacobian_determinant_l
 
         # Outputs
-        return y_hat, logarithmic_determinant
+        return y_hat, jacobian_determinant
     
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
         """Executes the operation of this layer in the inverse direction. It is thus the counterpart to :py:meth:`call`.
@@ -79,55 +82,42 @@ class FlowModel(tf.keras.Model):
 
         :param x: The data at which the determinant shall be computed. Assumed to be of shape [batch size, ...].
         :type x: :py:class:`tensorflow.Tensor`
-        :return: logarithmic_determinant (:py:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
+        :return: jacobian_determinant (:py:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
         """ 
 
         # Transform
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
+        jacobian_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
         for layer in self.flow_layers: 
-            x_tmp = layer(x=x) # Do this before the determinant is computed to ensure the layer's internal variables are set correctly
-            logarithmic_determinant += layer.compute_jacobian_determinant(x=x) 
+            x_tmp, _ = layer(inputs=x) # Do this before the determinant is computed to ensure the layer's internal variables are set correctly
+            jacobian_determinant += layer.compute_jacobian_determinant(x=x) 
             x = x_tmp
             
         # Outputs
-        return logarithmic_determinant
-    '''
-    def forward(self, x: tf.Tensor) -> Tuple[tf.Tensor, tf.Tensor]:
-        """Executes the :py:meth:`.FlowLayer.forward` method of each layer from :py:attr:`.FlowModel.flow_layers`. 
-
-        :param x: The data to be tranformed. Assumed to be of shape [batch size, ...].
-        :type x: :py:class:`tensorflow.Tensor`
-        :return: (y_hat, logarithmic_determinant) - The output of the transformation and the logarithmic jacobian determinant. Shape of y_hat == [batch size, ...], shape of logarithmic_determinant == [batch size]."""
-
-        # Transform
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
-        y_hat = x
-        for layer in self.flow_layers:
-            y_hat, logarithmic_determinant_l = layer.forward(x=y_hat)
-            logarithmic_determinant += logarithmic_determinant_l
-
-        # Outputs
-        return y_hat, logarithmic_determinant'''
+        return jacobian_determinant
     
     def get_config(self):
-        # 1. Get the base config (handles name, trainable, etc.)
-        config = super().get_config()
         
-        # 2. Serialize the layers using Keras's built-in utility
-        # This converts the Layer objects into a format (JSON-safe) Keras understands
+        # Update super config
+        config = super().get_config()
         config.update({
             "flow_layers": [tf.keras.layers.serialize(layer) for layer in self.flow_layers]
         })
+
+        # Outputs
         return config
 
     @classmethod
     def from_config(cls, config):
-        # This is the 'undo' button for get_config
-        # It turns the serialized JSON back into actual Layer objects
+        
+        # Construct instance
         layers_config = config.pop("flow_layers")
         flow_layers = [tf.keras.layers.deserialize(l) for l in layers_config]
-        return cls(flow_layers=flow_layers, **config)
+        instance = cls(flow_layers=flow_layers, **config)
+        
+        # Outputs
+        return instance
 
+@tf.keras.utils.register_keras_serializable()
 class DisentanglingFlowModel(FlowModel):
     """This network is a :py:class:`FlowModel` that can be used to disentangle factors, e.g. to understand representations
     in latent spaces of regular neural networks. The model can be used on single instances for inference via :py:meth:`DisentanglingFloWModel.call`
@@ -146,11 +136,9 @@ class DisentanglingFlowModel(FlowModel):
        - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
     
-    def __init__(self, flow_layers: List["FlowLayer"]):#, dimensions_per_factor: List[int]):
+    def __init__(self, flow_layers: List["FlowLayer"]):
         super().__init__(flow_layers)
-        #self._dimensions_per_factor_ = cp.copy(dimensions_per_factor)
-        #"""(List[int]) - A list that indicates for each factor (matched by index) how many dimensions are used."""
-    
+        
     def train_step(self, data):
         # Data comes from the iterator: (X_pair, Y_true)
         # X_pair is expected to be (X_a, X_b)
@@ -176,7 +164,8 @@ class DisentanglingFlowModel(FlowModel):
         self.optimizer.apply_gradients(zip(gradients, self.trainable_variables))
 
         return {"loss": loss}
-    
+
+@tf.keras.utils.register_keras_serializable() 
 class FlowLayer(tf.keras.layers.Layer):
     """Abstract base class for flow layers. Any input to this layer is assumed to have ``shape`` along ``axes`` as specified during
     initialization.
@@ -200,7 +189,7 @@ class FlowLayer(tf.keras.layers.Layer):
         - `"A Disentangling Invertible Interpretation Network for Explaining Latent Representations" by Patrick Esser, Robin Rombach and Bjorn Ommer <https://arxiv.org/abs/2004.13166>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs) -> "FlowLayer":
         """This constructor shall be used by subclasses only"""
 
         # Super
@@ -225,7 +214,7 @@ class FlowLayer(tf.keras.layers.Layer):
 
         :param inputs: The data to be tranformed. Assumed to be of shape [batch size, ...].
         :type inputs: :py:class:`tensorflow.Tensor`
-        :return: y_hat (:py:class:`tensorflow.Tensor`) - The output of the transformation of shape [batch size, ...]."""        
+        :return: (y_hat, jacobian_determinant) (Tuple[:py:class:`tensorflow.Tensor`, :py:class:`tensorflow.Tensor`]) - The output y_hat of the transformation of shape [batch size, ...] and the Jacobian determinant on logarithmic scale of shape [batch size]."""
         raise NotImplementedError()
 
     def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
@@ -247,7 +236,7 @@ class FlowLayer(tf.keras.layers.Layer):
 
         :param x: The data at which the determinant shall be computed. Assumed to be of shape [batch size, ...].
         :type x: :py:class:`tensorflow.Tensor`
-        :return: logarithmic_determinant (:py:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
+        :return: jacobian_determinant (:py:class:`tensorflow.Tensor`) - A measure of how much this layer contracts or dilates space at the point ``x``. Shape == [batch size].
         """        
 
         raise NotImplementedError()
@@ -259,15 +248,27 @@ class FlowLayer(tf.keras.layers.Layer):
 
         :param x: The data to be tranformed. Assumed to be of shape [batch size, ...].
         :type x: :py:class:`tensorflow.Tensor`
-        :return: (y_hat, logarithmic_determinant) - The output of the transformation and the logarithmic jacobian determinant. Shape of y_hat == [batch size, ...], shape of logarithmic_determinant == [batch size]."""
+        :return: (y_hat, jacobian_determinant) - The output of the transformation and the logarithmic jacobian determinant. Shape of y_hat == [batch size, ...], shape of jacobian_determinant == [batch size]."""
 
         # Transform
         y_hat = self(x)
-        logarithmic_determinant = self.compute_jacobian_determinant(x)
+        jacobian_determinant = self.compute_jacobian_determinant(x)
         
         # Outputs
-        return y_hat, logarithmic_determinant'''
+        return y_hat, jacobian_determinant'''
 
+    def get_config(self):
+        # Update the super config
+        config = super().get_config()
+        config.update({
+            "shape": self._shape_,
+            "axes": self._axes_
+        })
+        
+        # Outputs
+        return config
+
+@tf.keras.utils.register_keras_serializable()
 class Permutation(FlowLayer):
     """This layer flattens its input :math:`x` along ``axes``, then reorders the dimensions using ``permutation`` and reshapes 
     :math:`x` to its original shape. It is volume-preserving, meaning it has a Jacobian determinant of 1 (or 0 on logarithmic scale).
@@ -280,7 +281,7 @@ class Permutation(FlowLayer):
     :type permutation: List[int]
     """
 
-    def __init__(self, shape: List[int], axes: List[int], permutation: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], permutation: List[int], **kwargs) -> "Permutation":
 
         # Input validity
         dimension_count = int(np.prod(shape))
@@ -345,12 +346,26 @@ class Permutation(FlowLayer):
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
 
         # Create vector of zeros with length batch-size
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
+        jacobian_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
 
         # Outputs
-        return logarithmic_determinant
+        return jacobian_determinant
+    
+    def get_config(self):
+        
+        # Super
+        config = super(Permutation, self).get_config()
+        
+        # Update config
+        config.update(
+            {"permutation": self._forward_permutation_.numpy().tolist()}
+        )
+        
+        # Outputs
+        return config
 
-class Shuffle(Permutation):
+@tf.keras.utils.register_keras_serializable()
+class ShufflePermutation(Permutation):
     """Shuffles input :math:`x`. The permutation used for shuffling is randomly chosen once during initialization. 
     Thereafter it is saved as a private attribute. Shuffling is thus deterministic. **IMPORTANT:** The shuffle function is defined on 
     a vector, yet by the requirement of :py:class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis 
@@ -363,14 +378,25 @@ class Shuffle(Permutation):
     :type axes: List[int]
     """
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs) -> "ShufflePermutation":
 
         # Super
         dimension_count = int(np.prod(shape))
         permutation = list(range(dimension_count)); random.shuffle(permutation)
-        super(Shuffle, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+        super(ShufflePermutation, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
-class Heaviside(Permutation):
+    @classmethod
+    def from_config(cls, config):
+        
+        # Construct instance
+        config.pop("permutation") # Permutation is constructed internally
+        instance = cls(**config)
+        
+        # Outputs
+        return instance
+    
+@tf.keras.utils.register_keras_serializable()
+class HeavisidePermutation(Permutation):
     """Swops the first and second half of input :math:`x` as inspired by the `Heaviside 
     <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function.  **IMPORTANT:** The Heaviside function is defined on a vector, 
     yet by the requirement of :py:class:`Permutation`, inputs :math:`x` to this layer are allowed to have more than one axis in ``axes``.
@@ -384,14 +410,25 @@ class Heaviside(Permutation):
     :type axes: List[int]
     """
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs) -> "HeavisidePermutation":
 
         # Super
         dimension_count = tf.reduce_prod(shape).numpy()
         permutation = list(range(dimension_count//2, dimension_count)) + list(range(dimension_count//2))
-        super(Heaviside, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+        super(HeavisidePermutation, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
 
-class CheckerBoard(Permutation):
+    @classmethod
+    def from_config(cls, config):
+        
+        # Construct instance
+        config.pop("permutation") # Permutation is constructed internally
+        instance = cls(**config)
+        
+        # Outputs
+        return instance
+    
+@tf.keras.utils.register_keras_serializable()
+class CheckerBoardPermutation(Permutation):
     """Swops the entries of inputs :math:`x` as inspired by the `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_
     pattern. Swopping is done to preserve adjacency of cells within :math:`x`. **IMPORTANT:** The checkerboard pattern is usually
     defined on a matrix, i.e. 2 axes. Yet, here it is possible to specify any number of axes. Note, if the total number
@@ -438,7 +475,7 @@ class CheckerBoard(Permutation):
         for d in range(dimension_count):
             # Increment index counter (with carry on to next axes if needed)
             for s in range(len(shape)-1,-1,-1): 
-                if CheckerBoard.is_end_of_axis(index=current_indices[s], limit=shape[s], direction=directions[s]):
+                if CheckerBoardPermutation.is_end_of_axis(index=current_indices[s], limit=shape[s], direction=directions[s]):
                     directions[s] = -directions[s]
                 else:
                     current_indices[s] += directions[s]
@@ -446,7 +483,7 @@ class CheckerBoard(Permutation):
 
             yield current_indices
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs) -> "CheckerBoardPermutation":
 
         # Set up permutation vector
         dimension_count = np.prod(shape)
@@ -454,7 +491,7 @@ class CheckerBoard(Permutation):
         rope_values = [None] * dimension_count
         
         # Unravel tensor
-        rope_index_generator = CheckerBoard.generate_rope_indices(shape=shape)
+        rope_index_generator = CheckerBoardPermutation.generate_rope_indices(shape=shape)
         for d in range(dimension_count): rope_values[d] = tensor[tuple(next(rope_index_generator))]
 
         # Swop every two adjacent values
@@ -464,15 +501,26 @@ class CheckerBoard(Permutation):
             rope_values[d+1] = tmp
 
         # Ravel tensor
-        rope_index_generator = CheckerBoard.generate_rope_indices(shape=shape)
+        rope_index_generator = CheckerBoardPermutation.generate_rope_indices(shape=shape)
         for d in range(dimension_count): tensor[tuple(next(rope_index_generator))] = rope_values[d]
 
         # Flattened tensor now gives permutation
         permutation = list(np.reshape(tensor, [-1]))
 
         # Super
-        super(CheckerBoard, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
+        super(CheckerBoardPermutation, self).__init__(shape=shape, axes=axes, permutation=permutation, **kwargs)
     
+    @classmethod
+    def from_config(cls, config):
+        
+        # Construct instance
+        config.pop("permutation") # Permutation is constructed internally
+        instance = cls(**config)
+        
+        # Outputs
+        return instance
+    
+@tf.keras.utils.register_keras_serializable()
 class Coupling(FlowLayer):
     r"""This layer couples the input :math:`x` with itself inside the method :py:meth:`call` by implementing the following formulae:
     
@@ -511,7 +559,7 @@ class Coupling(FlowLayer):
         - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: mms.Mask, **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: mms.Mask, **kwargs) -> "Coupling":
         
         # Super
         super(Coupling, self).__init__(shape=shape, axes=axes, **kwargs)
@@ -642,12 +690,27 @@ class Coupling(FlowLayer):
         config = super(Coupling, self).get_config()
         
         # Update config
-        config = {"shape": self._shape_, "axes":self._axes_, "compute_coupling_parameters": tf.keras.layers.serialize(self._compute_coupling_parameters_), "mask": tf.keras.layers.serialize(self._mask_)}
-        config.update(self.config)
+        config.update(
+            {"compute_coupling_parameters": tf.keras.layers.serialize(self._compute_coupling_parameters_), 
+             "mask": tf.keras.layers.serialize(self._mask_)}
+        )
         
         # Outputs
         return config
     
+    
+    @classmethod
+    def from_config(cls, config):
+        
+        # Construct instance
+        compute_coupling_parameters = tf.keras.layers.deserialize(config.pop("compute_coupling_parameters"))
+        mask = tf.keras.layers.deserialize(config.pop("mask"))
+        instance = cls(compute_coupling_parameters=compute_coupling_parameters, mask=mask, **config)
+        
+        # Outputs
+        return instance
+    
+@tf.keras.utils.register_keras_serializable()
 class AdditiveCoupling(Coupling):
     """This coupling layer implements an additive coupling law of the form :math:`f(x_2, c(x_1) = x_2 + c(x_1)`. For details on the
     encapsulating theory refer to :py:class:`Coupling`. It is important that the ``compute_coupling_parameters`` argument is a :py:class:`tensorflow.keras.Layer`
@@ -658,7 +721,7 @@ class AdditiveCoupling(Coupling):
         - `"Density estimation using Real NVP" by Laurent Dinh and Jascha Sohl-Dickstein and Samy Bengio. <https://arxiv.org/abs/1605.08803>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: mms.Mask, **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], compute_coupling_parameters: tf.keras.Layer, mask: mms.Mask, **kwargs) -> "AdditiveCoupling":
         
         # Super
         super(AdditiveCoupling, self).__init__(shape=shape, axes=axes, compute_coupling_parameters=compute_coupling_parameters, mask=mask, **kwargs)
@@ -687,10 +750,11 @@ class AdditiveCoupling(Coupling):
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
         # Create a vector of zeros with length batch-size
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
+        jacobian_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
 
         # Outputs
-        return logarithmic_determinant
+        return jacobian_determinant
+    
 '''
 class AffineCoupling(Coupling):
     """This coupling layer implements an affine coupling law of the form :math:`f(x_2, c(x_1) = e^s x_2 + t`, where :math:`s, t = c(x)`. 
@@ -750,13 +814,15 @@ class AffineCoupling(Coupling):
 
         # Determinant
         logarithmic_scale = coupling_parameters[0]
-        logarithmic_determinant = 0.0
+        jacobian_determinant = 0.0
         for axis in self._mask_._axes_:
-            logarithmic_determinant += tf.keras.ops.reduce_sum(logarithmic_scale, axis=axis)
+            jacobian_determinant += tf.keras.ops.reduce_sum(logarithmic_scale, axis=axis)
 
         # Outputs
-        return logarithmic_determinant
+        return jacobian_determinant
 '''
+
+@tf.keras.utils.register_keras_serializable()
 class ActivationNormalization(FlowLayer):
     """A trainable location and scale transformation of the data. For each dimension of the specified input shape, a scale and a 
     location parameter is used. That is, if shape == [width, height], then 2 * width * height many parameters are used. Each pair of 
@@ -783,10 +849,10 @@ class ActivationNormalization(FlowLayer):
         def __call__(self, w: tf.Variable):
             return tf.clip_by_value(w, clip_value_min=1e-6, clip_value_max=w.value.dtype.max)
 
-    def __init__(self, shape: List[int], axes: List[int], **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], **kwargs) -> "ActivationNormalization":
 
         # Super
-        super(ActivationNormalization, self).__init__(shape=shape, axes=axes)
+        super(ActivationNormalization, self).__init__(shape=shape, axes=axes, **kwargs)
 
         # Attributes
         self._location_ = self.add_weight(shape = self._shape_,
@@ -855,12 +921,13 @@ class ActivationNormalization(FlowLayer):
         
         # Compute logarithmic determinant
         # By defintion: sum across dimensions for ln(scale)
-        logarithmic_determinant = - dimension_count * tf.keras.ops.sum(tf.keras.ops.log(self._scale_)) # single instance, scale is positive due to constraint, the - sign in front is because the scale is used in the denominator
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape)))) + logarithmic_determinant
+        jacobian_determinant = - dimension_count * tf.keras.ops.sum(tf.keras.ops.log(self._scale_)) # single instance, scale is positive due to constraint, the - sign in front is because the scale is used in the denominator
+        jacobian_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape)))) + jacobian_determinant
         
         # Outputs
-        return logarithmic_determinant
+        return jacobian_determinant
     
+@tf.keras.utils.register_keras_serializable()
 class Reflection(FlowLayer):
     """This layer reflects a data point around ``reflection_count`` learnable normals using the `Householder transform 
     <https://en.wikipedia.org/wiki/Householder_transformation>`_. In this context, the normal is the unit length vector orthogonal to
@@ -879,7 +946,7 @@ class Reflection(FlowLayer):
         - `"Gaussianization Flows" by Chenlin Meng, Yang Song, Jiaming Song and Stefano Ermon <https://arxiv.org/abs/2003.01941>`_
     """
 
-    def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs):
+    def __init__(self, shape: List[int], axes: List[int], reflection_count: int, **kwargs) -> "Reflection":
         # Input validity
         assert 1 <= reflection_count, f'The input reflection_count was expected to be at least 1 but found to be {reflection_count}.'
         
@@ -978,10 +1045,21 @@ class Reflection(FlowLayer):
         # -1 or 1, depending on whether an even or odd number of reflections are concatenated. Yet on logarithmic scale it is always 0.
         
         # Create vector of zeros with length batch-size
-        logarithmic_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
+        jacobian_determinant = 0.0 * tf.keras.ops.sum(x, axis=list(range(1, len(x.shape))))
 
         # Outputs
-        return logarithmic_determinant
+        return jacobian_determinant
+    
+    def get_config(self):
+        # Update the super config
+        config = super().get_config()
+        config.update({
+            "reflection_count": self._reflection_count_
+        })
+        
+        # Outputs
+        return config
+
 
 '''
 class Flatten(FlowLayer):
@@ -1012,10 +1090,10 @@ class Flatten(FlowLayer):
 
     def compute_jacobian_determinant(self, x: tf.Tensor) -> tf.Tensor:
         
-        logarithmic_determinant = tf.keras.ops.zeros_like(x[:, 0])
+        jacobian_determinant = tf.keras.ops.zeros_like(x[:, 0])
 
         # Outputs
-        return logarithmic_determinant
+        return jacobian_determinant
         
 
 class DisentanglingFlowModel(FlowModel):

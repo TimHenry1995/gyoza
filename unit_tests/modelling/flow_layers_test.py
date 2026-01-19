@@ -5,6 +5,7 @@ import tensorflow as tf, numpy as np
 import gyoza.modelling.masks as mms
 from typing import Dict, Any
 import os
+import copy as cp
 
 
 class ChannelWiseConvolutionTwoAxes(tf.keras.Model):
@@ -45,7 +46,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.models.Sequential([tf.keras.layers.Dense(units=5, activation='tanh')])
-        mask = mms.Heaviside(axes=[2], shape=[5]) # Heaviside mask
+        mask = mms.HeavisideMask(axes=[2], shape=[5]) # Heaviside mask
         mfl.AdditiveCoupling(axes=[2], shape=[5], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def test_init_2_axes(self):
@@ -54,7 +55,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         # Initialize
         compute_coupling_parameters = ChannelWiseConvolutionTwoAxes(layer_count=1, conv2D_kwargs={'filters':1, 'kernel_size':2, 'padding':'same', 'activation':'tanh'}) 
         
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,5]) 
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,5]) 
         mfl.AdditiveCoupling(axes=[1,2], shape=[2,5],compute_coupling_parameters=compute_coupling_parameters, mask=mask)
 
     def test_call_1_axis(self):
@@ -62,7 +63,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Lambda(lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()))
-        mask = mms.Heaviside(axes=[1],shape=[4])
+        mask = mms.HeavisideMask(axes=[1],shape=[4])
         layer = mfl.AdditiveCoupling(shape=[4], axes=[1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,4,3])
 
@@ -72,7 +73,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -83,7 +84,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Lambda(lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()))
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,4])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,4])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [1,2,4,3])
 
@@ -94,7 +95,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         x_target = tf.constant(x_target)
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -105,7 +106,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
-        mask = mms.Heaviside(axes=[1], shape=[4])
+        mask = mms.HeavisideMask(axes=[1], shape=[4])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(0,24,dtype=tf.keras.backend.floatx()), [2,4,3])
         y_hat = x.numpy()
@@ -127,7 +128,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = lambda x: tf.ones(shape=x.shape, dtype=tf.keras.backend.floatx()) 
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,4])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,4])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,4], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.random.normal([1,2,4,3], dtype=tf.keras.backend.floatx())
         y_hat = x.numpy()
@@ -154,7 +155,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.Heaviside(axes=[1], shape=[7])
+        mask = mms.HeavisideMask(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -163,7 +164,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -185,7 +186,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1], shape=[7])
+        mask = mms.CheckerBoardMask(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -194,7 +195,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -216,7 +217,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,7])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,7])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14*3,dtype=tf.keras.backend.floatx()), [3,2,7])
 
@@ -225,7 +226,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2)
@@ -242,7 +243,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
@@ -251,7 +252,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=5) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -275,17 +276,18 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1], shape=[7])
+        mask = mms.CheckerBoardMask(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
         # Observe
         x_observed = layer.compute_jacobian_determinant(x=x)
+        self.assertEqual(first=x_observed.shape, second=(2,))
 
         # Target
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -302,7 +304,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,7])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,7])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14*3,dtype=tf.keras.backend.floatx()), [3,2,7])
 
@@ -314,7 +316,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -329,7 +331,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
@@ -341,7 +343,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=5) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -359,7 +361,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             
             # Create coupling layer
             compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-            mask = mms.CheckerBoard(axes=[1,2], shape=input_shape[-3:-1])
+            mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
             
             # Create flow model
             model = mfl.FlowModel(flow_layers=[
@@ -378,7 +380,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         x = tf.reshape(tf.range(2*5*6*3,dtype=tf.keras.backend.floatx()), input_shape) 
 
         # Observe 
-        y_hat_1 = model(x=x)
+        y_hat_1, j_1 = model(inputs=x)
         path = os.path.join(os.getcwd(), "temporary_model_directory_for_additive_coupling_layer_unit_test.weights.h5")
         model.save_weights(path)
 
@@ -394,9 +396,12 @@ class TestAdditiveCoupling(unittest.TestCase):
         os.remove(path)
             
         # Observe second - this should now match y_hat_1
-        y_hat_2 = loaded_model(x=x)
+        y_hat_2, j_2 = loaded_model(inputs=x)
         
         # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_1.shape), tuple2=tuple(j_2.shape))
+        self.assertEqual(first=tf.reduce_sum((j_1-j_2)**2).numpy(), second=0)
+
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
@@ -408,7 +413,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Create coupling layer
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=input_shape[-3:-1])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
         
         # Create layer
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
@@ -419,7 +424,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         @tf.function
         def roundtrip(x):
-            y = layer(x=x)
+            y, _ = layer(inputs=x)
             return layer.invert(y)
 
         x = tf.random.normal(input_shape)
@@ -436,7 +441,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Create coupling layer
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=input_shape[-3:-1])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
         
         # Create flow model
         model = mfl.FlowModel(flow_layers=[
@@ -453,86 +458,207 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         for batch_size in [1, 5, 17, 64]:
             x = tf.random.normal([batch_size] + input_shape[-3:])
-            y = traced_forward(x)
+            y, j = traced_forward(x)
             self.assertEqual(y.shape, x.shape)
+            self.assertEqual(j.shape[0], batch_size)
+            self.assertEqual(len(j.shape), 1) # Should only be a vector
 
-    def test_earger_vs_graph_call_equivalence(self):
-        """Tests whether the call method of AdditiveCoupling is equivalent in graphs mode and in regular eager mode."""
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of AdditiveCoupling is equivalent in graph mode and in regular eager mode."""
 
-        # Setup
+        # Create a thin wrapper that tracks execution mode
+        class AdditiveCouplingWithExecutionMode(mfl.AdditiveCoupling):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(AdditiveCouplingWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Shape
         input_shape = [16, 9, 9, 3] # Batch size, widht, height, channel-count
-
-        # Create coupling layer
-        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=input_shape[-3:-1])
         
-        # Create flow model
-        layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        # Prepare input
         x = tf.random.uniform(shape=input_shape, dtype=tf.keras.backend.floatx())
         
-        # Observe
-        x_target = layer(x=x)
+        # Create coupling layer for eager mode
+        eager_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        eager_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        eager_layer = AdditiveCouplingWithExecutionMode(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=eager_compute_coupling_parameters, mask=eager_mask)
+        eager_layer.build(input_shape=input_shape)
 
-        # Graph mode
-        @tf.function
-        def graph_call(x): return layer(x=x)
-        x_observed = graph_call(x)
+        # Create coupling layer for graph mode
+        graph_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        graph_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        graph_layer = AdditiveCouplingWithExecutionMode(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=graph_compute_coupling_parameters, mask=graph_mask)
+        graph_layer.build(input_shape=input_shape)
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
         
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_determinant_equivalence(self):
-        """Tests whether the call method of AdditiveCoupling is equivalent in graphs mode and in regular eager mode."""
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
 
-        # Setup
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call and invert methods of AdditiveCoupling are equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class AdditiveCouplingWithExecutionMode(mfl.AdditiveCoupling):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(AdditiveCouplingWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Shape
         input_shape = [16, 9, 9, 3] # Batch size, widht, height, channel-count
 
-        # Create coupling layer
-        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=input_shape[-3:-1])
-        
-        # Create flow model
-        layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
+        # Prepare input
         x = tf.random.uniform(shape=input_shape, dtype=tf.keras.backend.floatx())
         
-        # Observe
-        det_target = layer.compute_jacobian_determinant(x=x)
-        
-        # Graph mode
-        @tf.function
-        def graph_determinant(x): return layer.compute_jacobian_determinant(x=x)
+        # Create coupling layer for eager mode
+        eager_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        eager_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        eager_layer = AdditiveCouplingWithExecutionMode(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=eager_compute_coupling_parameters, mask=eager_mask)
+        eager_layer.build(input_shape=input_shape)
 
-        det_observed = graph_determinant(x)
+        # Create coupling layer for graph mode
+        graph_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        graph_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        graph_layer = AdditiveCouplingWithExecutionMode(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=graph_compute_coupling_parameters, mask=graph_mask)
+        graph_layer.build(input_shape=input_shape)
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, is_eager
         
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
-        self.assertTupleEqual(tuple1=tuple(det_target.shape), tuple2=tuple(det_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((det_observed-det_target)**2).numpy(), second=0)
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_round_trip_equivalence(self):
-        """Tests whether the call method of AdditiveCoupling is equivalent in graphs mode and in regular eager mode."""
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of AdditiveCoupling is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class AdditiveCouplingWithExecutionMode(mfl.AdditiveCoupling):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(AdditiveCouplingWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
         # Setup
         input_shape = [16, 9, 9, 3] # Batch size, widht, height, channel-count
-
-        # Create coupling layer
-        compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=input_shape[-3:-1])
-        
-        # Create flow model
-        layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.random.uniform(shape=input_shape, dtype=tf.keras.backend.floatx())
         
-        # Observe
-        x_target = layer.invert(y_hat=layer(x))
-        
-        # Graph mode
-        @tf.function
-        def graph_round_trip(x): return layer.invert(y_hat=layer(x=x))
+        # Create eager layer
+        eager_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        eager_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        eager_layer = AdditiveCouplingWithExecutionMode(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=eager_compute_coupling_parameters, mask=eager_mask)
+        eager_layer(inputs=x) # Initialize weights
 
-        x_observed = graph_round_trip(x)
-        
+        # Create symbolic layer
+        symbolic_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        symbolic_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        symbolic_layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=symbolic_compute_coupling_parameters, mask=symbolic_mask)
+        symbolic_layer(inputs=x) # Initialize weights
+
+        # Copy weights from eager layer to symbolic layer
+        for eager_var, symbolic_var in zip(eager_layer.variables, symbolic_layer.variables):
+            symbolic_var.assign(cp.deepcopy(eager_var))
+
+        # Make symbolic layer symbolic with functional API
+        input = tf.keras.Input(shape=input_shape[-3:])    
+        y_hat, j_hat = symbolic_layer(input)
+        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
+
+        # Observe models output
+        x = tf.random.uniform(shape=input_shape, dtype=tf.keras.backend.floatx())
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_observed, j_observed = symbolic_model(x)
+
         # Evaluate
+        self.assertEqual(is_eager, True) # If not eager, something is wrong here.
+
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
@@ -541,7 +667,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         input_shape = (10, 5, 6, 3) # Batch size 10, height 5, width 6, channels 3
 
@@ -557,7 +683,7 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
         model = mfl.FlowModel(flow_layers=[
             mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         ])
@@ -578,11 +704,11 @@ class TestShuffle(unittest.TestCase):
         
         # Initialize
         dimension_count = 100
-        shuffling_layer = mfl.Shuffle(shape=[dimension_count], axes=[1])
+        shuffling_layer = mfl.ShufflePermutation(shape=[dimension_count], axes=[1])
         x = tf.random.uniform(shape=[10, dimension_count], dtype=tf.keras.backend.floatx())
         
         # Observe
-        y_hat = shuffling_layer(x=x)
+        y_hat, _ = shuffling_layer(inputs=x)
         x_hat = shuffling_layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -594,11 +720,11 @@ class TestShuffle(unittest.TestCase):
         
         # Initialize
         batch_size = 2; width = 4; height = 5
-        shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
+        shuffling_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
         
         # Observe
-        y_hat = shuffling_layer(x=x)
+        y_hat, _ = shuffling_layer(inputs=x)
         x_hat = shuffling_layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -610,12 +736,12 @@ class TestShuffle(unittest.TestCase):
         
         # Initialize
         dimension_count = 100
-        shuffling_layer = mfl.Shuffle(shape=[dimension_count], axes=[1])
+        shuffling_layer = mfl.ShufflePermutation(shape=[dimension_count], axes=[1])
         x = tf.random.uniform(shape=[10, dimension_count], dtype=tf.keras.backend.floatx())
         
         # Observe
-        y_hat_1 = shuffling_layer(x=x)
-        y_hat_2 = shuffling_layer(x=x)
+        y_hat_1, _ = shuffling_layer(inputs=x)
+        y_hat_2, _ = shuffling_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
@@ -626,12 +752,12 @@ class TestShuffle(unittest.TestCase):
         
         # Initialize
         batch_size = 2; width = 4; height = 5
-        shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
+        shuffling_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
          
         # Observe
-        y_hat_1 = shuffling_layer(x=x)
-        y_hat_2 = shuffling_layer(x=x)
+        y_hat_1, _ = shuffling_layer(inputs=x)
+        y_hat_2, _ = shuffling_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
@@ -642,88 +768,217 @@ class TestShuffle(unittest.TestCase):
 
         # Initialize
         width = 100; height = 200; channel_count = 3
-        shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
+        shuffling_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         model = mfl.FlowModel([shuffling_layer])
         x = tf.random.uniform(shape=[10, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
         # Observe first
-        y_hat_1 = model(x=x)
+        y_hat_1, _ = model(inputs=x)
         
         # Save and load
         path = os.path.join(os.getcwd(), "temporary_model_directory_for_shuffle_model_unit_test.weights.h5")
         model.save_weights(path)
         del model
-        loaded_shuffling_layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
+        loaded_shuffling_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         loaded_model = mfl.FlowModel([loaded_shuffling_layer])
         loaded_model.build(input_shape=x.shape)
         loaded_model.load_weights(path)
         os.remove(path)
     
-        y_hat_2 = loaded_model(x=x)
+        y_hat_2, _ = loaded_model(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_call_equivalence(self):
-        """Tests whether the call method of Shuffle is equivalent in graphs mode and in regular eager mode."""
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of Shuffle is equivalent in graph mode and in regular eager mode."""
 
+        # Create a thin wrapper that tracks execution mode
+        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+
+        # Create coupling layer for eager mode
         # Initialize
-        batch_size = 2; width = 4; height = 5
-        layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
+        eager_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         
-        # Observe
-        x_target = layer(x=x)
+        # Create coupling layer for graph mode
+        graph_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
 
-        # Graph mode
-        @tf.function
-        def graph_call(x): return layer(x=x)
-        x_observed = graph_call(x)
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
+        
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_determinant_equivalence(self):
-        """Tests whether the call method of Shuffle is equivalent in graphs mode and in regular eager mode."""
-
-        # Initialize
-        batch_size = 2; width = 4; height = 5
-        layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
-        
-        # Observe
-        det_target = layer.compute_jacobian_determinant(x=x)
-        
-        # Graph mode
-        @tf.function
-        def graph_determinant(x): return layer.compute_jacobian_determinant(x=x)
-
-        det_observed = graph_determinant(x)
-        
         # Evaluate
-        self.assertTupleEqual(tuple1=tuple(det_target.shape), tuple2=tuple(det_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((det_observed-det_target)**2).numpy(), second=0)
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_round_trip_equivalence(self):
-        """Tests whether the call method of Shuffle is equivalent in graphs mode and in regular eager mode."""
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
-        # Initialize
-        batch_size = 2; width = 4; height = 5
-        layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
-        
-        # Observe
-        x_target = layer.invert(y_hat=layer(x))
-        
-        # Graph mode
-        @tf.function
-        def graph_round_trip(x): return layer.invert(y_hat=layer(x=x))
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
 
-        x_observed = graph_round_trip(x)
-        
         # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call and invert methods of Shuffle are equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+
+        # Create coupling layer for eager mode
+        # Initialize
+        eager_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
+        
+        # Create coupling layer for graph mode
+        graph_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, is_eager
+        
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of Shuffle is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+
+        # Create coupling layer for eager mode
+        # Initialize
+        eager_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
+        
+        # Create coupling layer for graph mode
+        graph_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, j_target = layer(inputs=x)
+
+        # Symbolic mode
+        symbolic_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
+        symbolic_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
+        symbolic_layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=symbolic_compute_coupling_parameters, mask=symbolic_mask)
+        
+        # copy weights from eager layer to symbolic layer
+        for var, symbolic_var in zip(layer.variables, symbolic_layer.variables):
+            symbolic_var.assign(var)
+
+        input = tf.keras.Input(shape=input_shape[-3:])    
+        y_hat, j_hat = layer(input)
+        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
+        x_observed, j_observed = symbolic_model(x)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
@@ -732,7 +987,7 @@ class TestShuffle(unittest.TestCase):
 
         # Initialize
         batch_size = 2; width = 4; height = 5
-        layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
+        layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         
         # Build
         layer.build(input_shape=[batch_size, width, height])
@@ -747,7 +1002,7 @@ class TestShuffle(unittest.TestCase):
 
         # Initialize
         batch_size = 2; width = 4; height = 5
-        layer = mfl.Shuffle(shape=[width, height], axes=[1,2])
+        layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
         model = mfl.FlowModel(flow_layers=[layer])
         input_shape = (batch_size, width, height)
 
@@ -760,18 +1015,205 @@ class TestShuffle(unittest.TestCase):
         self.assertEqual(first=hasattr(model.flow_layers[0], '_forward_permutation_'), second=True)
         self.assertEqual(first=hasattr(model.flow_layers[0], '_inverse_permutation_'), second=True)
 
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of Shuffle is equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        
+        # Create coupling layer for eager mode
+        eager_layer = ShuffleWithExecutionMode(shape=[width, height], axes=[1,2])
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Create coupling layer for graph mode
+        graph_layer = ShuffleWithExecutionMode(shape=[width, height], axes=[1,2])
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
+        
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call and invert methods of Shuffle are equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        
+        # Create coupling layer for eager mode
+        eager_layer = ShuffleWithExecutionMode(shape=[width, height], axes=[1,2])
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Create coupling layer for graph mode
+        graph_layer = ShuffleWithExecutionMode(shape=[width, height], axes=[1,2])
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, is_eager
+        
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of Shuffling is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        x = tf.random.uniform(shape=[batch_size,width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Create coupling layer for eager mode
+        eager_layer = ShuffleWithExecutionMode(shape=[width, height], axes=[1,2])
+        eager_layer(inputs=x)
+
+        # Create coupling layer for graph mode
+        symbolic_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])        
+        symbolic_layer(inputs=x)
+
+        # Copy weights from eager layer to symbolic layer
+        for eager_var, symbolic_var in zip(eager_layer.variables, symbolic_layer.variables):
+            symbolic_var.assign(cp.deepcopy(eager_var))
+
+        # Make symbolic layer symbolic with functional API
+        input = tf.keras.Input(shape=[width, height, channel_count])    
+        y_hat, j_hat = symbolic_layer(input)
+        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
+
+        # Observe models output
+        x = tf.random.uniform(shape=[batch_size,width, height, channel_count], dtype=tf.keras.backend.floatx())
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_observed, j_observed = symbolic_model(x)
+
+        # Evaluate
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
 class TestCheckerBoard(unittest.TestCase):
 
     def test_call_2_axes_input_1_even_axis_permutation(self):
         """Tests whether the call method correctly swops indices on a 2 axis input with even dimension count along the permutation axis."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[4], axes=[1])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[4], axes=[1])
         x = tf.constant([[4,6,3,2], [1,3,7,8]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[6,4,2,3], [3,1,8,7]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -781,12 +1223,12 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 2 axis input with odd dimension count along the permutation axis."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[5], axes=[1])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[5], axes=[1])
         x = tf.constant([[4,6,3,2,1], [1,3,7,8,4]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[6,4,2,3,1], [3,1,8,7,4]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -796,14 +1238,14 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the two permutation axes."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,4], axes=[1,2])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[2,4], axes=[1,2])
         x = tf.constant([[[4,6,3,2], [1,3,7,8]],
                          [[8,3,5,2], [9,7,8,2]]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[[6,4,2,3], [3,1,8,7]],
                          [[3,8,2,5], [7,9,2,8]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -813,14 +1255,14 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 3 axis input with even dimension count along the first and odd count along the second permutation axis."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,5], axes=[1,2])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[2,5], axes=[1,2])
         x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5]],
                          [[8,3,5,2,4], [9,7,8,2,1]]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[[6,4,2,3,5], [3,1,8,7,9]],
                          [[3,8,2,5,1], [7,9,2,8,4]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -830,14 +1272,14 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 3 axis input with odd dimension count along the two permutation axes."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[3,5], axes=[1,2])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[3,5], axes=[1,2])
         x = tf.constant([[[4,6,3,2,9], [1,3,7,8,5], [5,3,7,9,0]],
                          [[8,3,5,2,4], [9,7,8,2,1], [1,3,6,0,9]]], dtype=tf.keras.backend.floatx())
         y = tf.constant([[[6,4,2,3,5], [3,1,8,7,9], [3,5,9,7,0]],
                          [[3,8,2,5,1], [7,9,2,8,4], [3,1,0,6,9]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -847,7 +1289,7 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 4 axis input with even dimension count along the three permutation axes."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,2,4], axes=[1,2,3])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[2,2,4], axes=[1,2,3])
         x = tf.constant([[[[4,6,3,2], [1,3,7,8]],
                           [[8,3,5,2], [9,7,8,2]]],
                          [[[7,3,4,2], [5,8,9,6]],
@@ -860,7 +1302,7 @@ class TestCheckerBoard(unittest.TestCase):
                           [[2,0,6,4], [1,0,2,3]]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -870,7 +1312,7 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 4 axis input with even dimension count along the first and third permutation axes and odd count along the second axis."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,3,4], axes=[1,2,3])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[2,3,4], axes=[1,2,3])
         x = tf.constant([[[[4,6,3,2], [1,3,7,8], [3,6,9,7]],
                           [[8,3,5,2], [9,7,8,2], [1,3,6,9]]],
                          [[[7,3,4,2], [5,8,9,6], [2,4,3,7]],
@@ -882,7 +1324,7 @@ class TestCheckerBoard(unittest.TestCase):
                           [[2,0,6,4], [1,0,2,3], [7,1,5,0]]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -892,7 +1334,7 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 4 axis input with odd dimension count along the second and third permutation axes and even count along the first axis."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[2,3,5], axes=[1,2,3])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[2,3,5], axes=[1,2,3])
         x = tf.constant([[[[4,6,3,2,5], [1,3,7,8,9], [3,6,9,7,0]],
                           [[8,3,5,2,1], [9,7,8,2,3], [1,3,6,9,5]]],
                          [[[7,3,4,2,0], [5,8,9,6,3], [2,4,3,7,1]],
@@ -904,7 +1346,7 @@ class TestCheckerBoard(unittest.TestCase):
                           [[2,0,6,4,8], [1,0,2,3,7], [7,1,5,0,1]]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -914,7 +1356,7 @@ class TestCheckerBoard(unittest.TestCase):
         """Tests whether the call method correctly swops indices on a 4 axis input with odd dimension count along the three permutation axes."""
         
         # Initialize
-        permutation_layer = mfl.CheckerBoard(shape=[3,3,5], axes=[1,2,3])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[3,3,5], axes=[1,2,3])
         x = tf.constant([[[[4,6,3,2,5], [1,3,7,8,9], [3,6,9,7,0]],
                           [[8,3,5,2,1], [9,7,8,2,3], [1,3,6,9,5]],
                           [[1,5,3,7,4], [1,3,8,7,2], [7,3,5,2,9]]],
@@ -930,7 +1372,7 @@ class TestCheckerBoard(unittest.TestCase):
                           [[8,6,5,3,8], [3,1,9,6,2], [4,2,6,3,8]]]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y.shape), tuple2=tuple(y_hat.shape))
@@ -941,11 +1383,11 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Initialize
         batch_size = 2; width = 4; height = 6
-        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[width, height], axes=[1,2])
         x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
         
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
         x_hat = permutation_layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -957,11 +1399,11 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Initialize
         batch_size = 2; width = 4; height = 7
-        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[width, height], axes=[1,2])
         x = tf.random.uniform(shape=[batch_size, width, height], dtype=tf.keras.backend.floatx())
         
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
         x_hat = permutation_layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -973,77 +1415,201 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Initialize
         batch_size = 2; width = 4; height = 7; channel_count = 3
-        permutation_layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        permutation_layer = mfl.CheckerBoardPermutation(shape=[width, height], axes=[1,2])
         x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
         # Observe
-        y_hat = permutation_layer(x=x)
+        y_hat, _ = permutation_layer(inputs=x)
         x_hat = permutation_layer.invert(y_hat=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
         self.assertEqual(first=tf.reduce_sum((x-x_hat)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_call_equivalence(self):
-        """Tests whether the call method of Checkerboad is equivalent in graphs mode and in regular eager mode."""
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of CheckerBoard is equivalent in graph mode and in regular eager mode."""
 
-        # Initialize
-        batch_size = 2; width = 4; height = 7; channel_count = 3
-        layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        # Create a thin wrapper that tracks execution mode
+        class CheckerBoardWithExecutionMode(mfl.CheckerBoardPermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(CheckerBoardWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        
+        # Create coupling layer for eager mode
+        eager_layer = CheckerBoardWithExecutionMode(shape=[width, height], axes=[1,2])
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Create coupling layer for graph mode
+        graph_layer = CheckerBoardWithExecutionMode(shape=[width, height], axes=[1,2])
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
         x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
-        # Observe
-        x_target = layer(x=x)
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
-        # Graph mode
-        @tf.function
-        def graph_call(x): return layer(x=x)
-        x_observed = graph_call(x)
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
         
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_determinant_equivalence(self):
-        """Tests whether the call method of Checkerboard is equivalent in graphs mode and in regular eager mode."""
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
 
-        # Initialize
-        batch_size = 2; width = 4; height = 7; channel_count = 3
-        layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call and invert methods of CheckerBoard are equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class CheckerBoardWithExecutionMode(mfl.CheckerBoardPermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(CheckerBoardWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        
+        # Create coupling layer for eager mode
+        eager_layer = CheckerBoardWithExecutionMode(shape=[width, height], axes=[1,2])
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Create coupling layer for graph mode
+        graph_layer = CheckerBoardWithExecutionMode(shape=[width, height], axes=[1,2])
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
         x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
-        # Observe
-        det_target = layer.compute_jacobian_determinant(x=x)
-        
-        # Graph mode
-        @tf.function
-        def graph_determinant(x): return layer.compute_jacobian_determinant(x=x)
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
-        det_observed = graph_determinant(x)
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, is_eager
         
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
-        self.assertTupleEqual(tuple1=tuple(det_target.shape), tuple2=tuple(det_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((det_observed-det_target)**2).numpy(), second=0)
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_round_trip_equivalence(self):
-        """Tests whether the call method of Reflection is equivalent in graphs mode and in regular eager mode."""
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
-        
-        # Initialize
-        batch_size = 2; width = 4; height = 7; channel_count = 3
-        layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
-        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
-        
-        # Observe
-        x_target = layer.invert(y_hat=layer(x))
-        
-        # Graph mode
-        @tf.function
-        def graph_round_trip(x): return layer.invert(y_hat=layer(x=x))
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
 
-        x_observed = graph_round_trip(x)
-        
         # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of CheckerBoard is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class CheckerBoardWithExecutionMode(mfl.CheckerBoardPermutation):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(CheckerBoardWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        x = tf.random.uniform(shape=[batch_size,width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Create coupling layer for eager mode
+        eager_layer = CheckerBoardWithExecutionMode(shape=[width, height], axes=[1,2])
+        eager_layer(inputs=x)
+
+        # Create coupling layer for graph mode
+        symbolic_layer = mfl.CheckerBoardPermutation(shape=[width, height], axes=[1,2])        
+        symbolic_layer(inputs=x)
+
+        # Copy weights from eager layer to symbolic layer
+        for eager_var, symbolic_var in zip(eager_layer.variables, symbolic_layer.variables):
+            symbolic_var.assign(cp.deepcopy(eager_var))
+
+        # Make symbolic layer symbolic with functional API
+        input = tf.keras.Input(shape=[width, height, channel_count])    
+        y_hat, j_hat = symbolic_layer(input)
+        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
+
+        # Observe models output
+        x = tf.random.uniform(shape=[batch_size,width, height, channel_count], dtype=tf.keras.backend.floatx())
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_observed, j_observed = symbolic_model(x)
+
+        # Evaluate
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
@@ -1052,7 +1618,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Initialize
         batch_size = 12; width = 4; height = 7; channel_count = 3
-        layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        layer = mfl.CheckerBoardPermutation(shape=[width, height], axes=[1,2])
 
         # Build
 
@@ -1068,7 +1634,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Initialize
         batch_size = 12; width = 4; height = 7; channel_count = 3
-        layer = mfl.CheckerBoard(shape=[width, height], axes=[1,2])
+        layer = mfl.CheckerBoardPermutation(shape=[width, height], axes=[1,2])
         model = mfl.FlowModel(flow_layers=[layer])
         
         # Build
@@ -1095,7 +1661,7 @@ class TestReflection(unittest.TestCase):
         x_target = tf.constant([[-2,-1,-3],[-5,-4,-6]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        x_observed = reflection_layer(x=x)
+        x_observed, _ = reflection_layer(inputs=x)
         
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -1116,7 +1682,7 @@ class TestReflection(unittest.TestCase):
         x_target = tf.transpose(x_target, [0,2,1])
 
         # Observe
-        x_observed = reflection_layer(x=x)
+        x_observed, _ = reflection_layer(inputs=x)
         
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -1134,7 +1700,7 @@ class TestReflection(unittest.TestCase):
         x_target = tf.constant([[[-2,-1,-3],[4,5,6]], [[-8,-7,-9],[10,11,12]]], dtype=tf.keras.backend.floatx())
         
         # Observe
-        x_observed = reflection_layer(x=x)
+        x_observed, _ = reflection_layer(inputs=x)
         
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -1149,7 +1715,7 @@ class TestReflection(unittest.TestCase):
         x = tf.constant([[1,2,3],[4,5,6]], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = reflection_layer(x=x)
+        y_hat, _ = reflection_layer(inputs=x)
         x_hat = reflection_layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -1165,7 +1731,7 @@ class TestReflection(unittest.TestCase):
         x = tf.random.uniform([batch_size, width, height], dtype=tf.keras.backend.floatx())
 
         # Observe
-        y_hat = reflection_layer(x=x)
+        y_hat, _ = reflection_layer(inputs=x)
         x_hat = reflection_layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -1183,7 +1749,7 @@ class TestReflection(unittest.TestCase):
         x = tf.random.uniform(shape=[10, width, height, dimension_count], dtype=tf.keras.backend.floatx())
         
         # Observe first
-        y_hat_1 = model(x=x)
+        y_hat_1, _ = model(inputs=x)
         
         # Save and load
         path = os.path.join(os.getcwd(), "temporary_model_directory_for_reflection_model_unit_test.weights.h5")
@@ -1195,7 +1761,7 @@ class TestReflection(unittest.TestCase):
         loaded_model.load_weights(path)
         os.remove(path)
     
-        y_hat_2 = loaded_model(x=x)
+        y_hat_2, _ = loaded_model(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
@@ -1211,7 +1777,7 @@ class TestReflection(unittest.TestCase):
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -1220,63 +1786,234 @@ class TestReflection(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.abs(np.linalg.det(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
-    def test_earger_vs_graph_call_equivalence(self):
-        """Tests whether the call method of Reflection is equivalent in graphs mode and in regular eager mode."""
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of Reflection is equivalent in graph mode and in regular eager mode."""
 
-        # Initialize
-        layer = mfl.Reflection(shape=[3,4], axes=[1,2], reflection_count=2)
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
+        # Create a thin wrapper that tracks execution mode
+        class ReflectionWithExecutionMode(mfl.Reflection):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ReflectionWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+            def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
+                
+                # Prepare self for inversion
+                previous_mode = self._inverse_mode_
+                self._inverse_mode_ = True
 
-        # Observe
-        x_target = layer(x)
+                # Call forward method (will now function as inverter)
+                x, _, _ = self(inputs=y_hat)
+
+                # Undo the setting of self to restore the method's precondition
+                self._inverse_mode_ = previous_mode
+
+                # Outputs
+                return x
+            
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
         
-        # Graph mode
-        @tf.function
-        def graph_call(x): return layer(x)
+        # Create coupling layer for eager mode
+        eager_layer = ReflectionWithExecutionMode(shape=[width, height], axes=[1,2], reflection_count=6)
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
 
-        x_observed = graph_call(x)
+        # Create coupling layer for graph mode
+        graph_layer = ReflectionWithExecutionMode(shape=[width, height], axes=[1,2], reflection_count=6)
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
+        
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_determinant_equivalence(self):
-        """Tests whether the call method of Reflection is equivalent in graphs mode and in regular eager mode."""
-
-        # Initialize
-        layer = mfl.Reflection(shape=[3,4], axes=[1,2], reflection_count=2)
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
-
-        # Observe
-        det_target = layer.compute_jacobian_determinant(x=x)
-        
-        # Graph mode
-        @tf.function
-        def graph_determinant(x): return layer.compute_jacobian_determinant(x)
-
-        det_observed = graph_determinant(x)
-        
         # Evaluate
-        self.assertTupleEqual(tuple1=tuple(det_target.shape), tuple2=tuple(det_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((det_observed-det_target)**2).numpy(), second=0)
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_round_trip_equivalence(self):
-        """Tests whether the call method of Reflection is equivalent in graphs mode and in regular eager mode."""
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
-        # Initialize
-        layer = mfl.Reflection(shape=[3,4], axes=[1,2], reflection_count=2)
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
 
-        # Observe
-        x_target = layer.invert(y_hat=layer(x))
-        
-        # Graph mode
-        @tf.function
-        def graph_round_trip(x): return layer.invert(y_hat=layer(x=x))
-
-        x_observed = graph_round_trip(x)
-        
         # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call and invert methods of Reflection are equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ReflectionWithExecutionMode(mfl.Reflection):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ReflectionWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+            def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
+                
+                # Prepare self for inversion
+                previous_mode = self._inverse_mode_
+                self._inverse_mode_ = True
+
+                # Call forward method (will now function as inverter)
+                x, _, _ = self(inputs=y_hat)
+
+                # Undo the setting of self to restore the method's precondition
+                self._inverse_mode_ = previous_mode
+
+                # Outputs
+                return x
+            
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        
+        # Create coupling layer for eager mode
+        eager_layer = ReflectionWithExecutionMode(shape=[width, height], axes=[1,2], reflection_count=6)
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Create coupling layer for graph mode
+        graph_layer = ReflectionWithExecutionMode(shape=[width, height], axes=[1,2], reflection_count=6)
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, is_eager
+        
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of Reflection is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ReflectionWithExecutionMode(mfl.Reflection):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ReflectionWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+            def invert(self, y_hat: tf.Tensor) -> tf.Tensor:
+                
+                # Prepare self for inversion
+                previous_mode = self._inverse_mode_
+                self._inverse_mode_ = True
+
+                # Call forward method (will now function as inverter)
+                x, _, _ = self(inputs=y_hat)
+
+                # Undo the setting of self to restore the method's precondition
+                self._inverse_mode_ = previous_mode
+
+                # Outputs
+                return x
+            
+        # Prepare shape
+        batch_size = 2; width = 4; height = 5; channel_count = 3
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Create coupling layer for eager mode
+        eager_layer = ReflectionWithExecutionMode(shape=[width, height], axes=[1,2], reflection_count=6)
+        eager_layer(inputs=x)
+
+        # Create coupling layer for graph mode
+        symbolic_layer = mfl.Reflection(shape=[width, height], axes=[1,2], reflection_count=6)        
+        symbolic_layer(inputs=x)
+
+        # Copy weights from eager layer to symbolic layer
+        for eager_var, symbolic_var in zip(eager_layer.variables, symbolic_layer.variables):
+            symbolic_var.assign(cp.deepcopy(eager_var))
+
+        # Make symbolic layer symbolic with functional API
+        input = tf.keras.Input(shape=[width, height, channel_count])    
+        y_hat, j_hat = symbolic_layer(input)
+        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
+
+        # Observe models output
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_observed, j_observed = symbolic_model(x)
+
+        # Evaluate
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
@@ -1342,7 +2079,7 @@ class TestActivationNormalization(unittest.TestCase):
         s_target = tf.ones([3])
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
         l_observed = tf.math.reduce_mean(x_observed, axis=0)
         s_observed = tf.math.reduce_std(x_observed, axis=0)
 
@@ -1371,7 +2108,7 @@ class TestActivationNormalization(unittest.TestCase):
         s_target = tf.ones([3,4])
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
         l_observed = tf.math.reduce_mean(x_observed, axis=0)
         s_observed = tf.math.reduce_std(x_observed, axis=0)
 
@@ -1398,7 +2135,7 @@ class TestActivationNormalization(unittest.TestCase):
         s_target = tf.ones([3])
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
         x_observed = tf.reshape(x_observed, [8,3])
         l_observed = tf.math.reduce_mean(x_observed, axis=0)
         s_observed = tf.math.reduce_std(x_observed, axis=0)
@@ -1426,7 +2163,7 @@ class TestActivationNormalization(unittest.TestCase):
         s_target = tf.ones([3])
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
         x_observed = tf.reshape(x_observed, [40,3])
         l_observed = tf.math.reduce_mean(x_observed, axis=0)
         s_observed = tf.math.reduce_std(x_observed, axis=0)
@@ -1454,7 +2191,7 @@ class TestActivationNormalization(unittest.TestCase):
         s_target = tf.ones([3,4])
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
         x_observed = tf.transpose(x_observed, perm=[0,3,1,2]) # Now has shape [2,5,3,4]
         x_observed = tf.reshape(x_observed, [10,3,4])
         l_observed = tf.math.reduce_mean(x_observed, axis=0)
@@ -1483,7 +2220,7 @@ class TestActivationNormalization(unittest.TestCase):
         s_target = tf.ones([3,5])
 
         # Observe
-        x_observed = layer(x)
+        x_observed, _ = layer(x)
         x_observed = tf.transpose(x_observed, perm=[0,2,1,3]) # Now has shape [2,4,3,5]
         x_observed = tf.reshape(x_observed, [8,3,5])
         l_observed = tf.math.reduce_mean(x_observed, axis=0)
@@ -1511,7 +2248,7 @@ class TestActivationNormalization(unittest.TestCase):
         x_target = x
 
         # Observe
-        y_hat = layer(x)
+        y_hat, _ = layer(x)
         x_observed = layer.invert(y_hat=y_hat)
 
         # Evaluate
@@ -1532,7 +2269,7 @@ class TestActivationNormalization(unittest.TestCase):
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -1562,7 +2299,7 @@ class TestActivationNormalization(unittest.TestCase):
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=3) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         J = tf.reshape(J, [5,12,12])
@@ -1593,7 +2330,7 @@ class TestActivationNormalization(unittest.TestCase):
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=3) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         J = tf.reshape(J, [5,12,12])
@@ -1624,7 +2361,7 @@ class TestActivationNormalization(unittest.TestCase):
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=3) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         J = tf.reshape(J, [5,12,12])
@@ -1655,7 +2392,7 @@ class TestActivationNormalization(unittest.TestCase):
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=4) # Second batch axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         J = tf.reduce_sum(J, axis=6) # Second channel axis
@@ -1674,93 +2411,190 @@ class TestActivationNormalization(unittest.TestCase):
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.prod(np.diagonal(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
-    def test_earger_vs_graph_call_equivalence(self):
-        """Tests whether the call method of ActivationNormalization is equivalent in graphs mode and in regular eager mode."""
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of ActivationNormalization is equivalent in graph mode and in regular eager mode."""
 
-        # Initialize
-        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
-
-        # Set the layer's variables to simulate standard normalization
-        layer.variables[0].assign(tf.math.reduce_mean(x, axis=[0,3]))  # Set mean to observed mean
-        layer.variables[1].assign(tf.math.reduce_std(x, axis=[0,3]))
-
-        # Observe
-        x_target = layer(x)
+        # Create a thin wrapper that tracks execution mode
+        class ActivationNormalizationdWithExecutionMode(mfl.ActivationNormalization):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ActivationNormalizationdWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 5; width = 3; height = 4; channel_count = 2
         
-        # Graph mode
-        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        
-        # Set the layer's variables to simulate standard normalization
-        layer.variables[0].assign(tf.math.reduce_mean(x, axis=[0,3]))  # Set mean to observed mean
-        layer.variables[1].assign(tf.math.reduce_std(x, axis=[0,3]))
+        # Create coupling layer for eager mode
+        eager_layer = ActivationNormalizationdWithExecutionMode(shape=[3,4], axes=[1,2])
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
 
-        @tf.function
-        def graph_call(x): return layer(x)
+        # Create coupling layer for graph mode
+        graph_layer = ActivationNormalizationdWithExecutionMode(shape=[3,4], axes=[1,2])
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
 
-        x_observed = graph_call(x)
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
         
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
+        
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_determinant_equivalence(self):
-        """Tests whether the call method of ActivationNormalization is equivalent in graphs mode and in regular eager mode."""
-
-        # Initialize
-        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
-
-        # Set the layer's variables to simulate standard normalization
-        layer.variables[0].assign(tf.math.reduce_mean(x, axis=[0,3]))  # Set mean to observed mean
-        layer.variables[1].assign(tf.math.reduce_std(x, axis=[0,3]))
-
-        # Observe
-        det_target = layer.compute_jacobian_determinant(x=x)
-        
-        # Graph mode
-        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        
-        # Set the layer's variables to simulate standard normalization
-        layer.variables[0].assign(tf.math.reduce_mean(x, axis=[0,3]))  # Set mean to observed mean
-        layer.variables[1].assign(tf.math.reduce_std(x, axis=[0,3]))
-
-        @tf.function
-        def graph_determinant(x): return layer.compute_jacobian_determinant(x=x)
-
-        det_observed = graph_determinant(x)
-        
         # Evaluate
-        self.assertTupleEqual(tuple1=tuple(det_target.shape), tuple2=tuple(det_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((det_observed-det_target)**2).numpy(), second=0)
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
 
-    def test_earger_vs_graph_round_trip_equivalence(self):
-        """Tests whether the call method of ActivationNormalization is equivalent in graphs mode and in regular eager mode."""
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
-        # Initialize
-        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        x = tf.reshape(tf.range(0,24*5,dtype=tf.keras.backend.floatx()), [2,3,4,5])
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
 
-        # Set the layer's variables to simulate standard normalization
-        layer.variables[0].assign(tf.math.reduce_mean(x, axis=[0,3]))  # Set mean to observed mean
-        layer.variables[1].assign(tf.math.reduce_std(x, axis=[0,3]))
-
-        # Observe
-        x_target = layer.invert(y_hat=layer(x))
-        
-        # Graph mode
-        layer = mfl.ActivationNormalization(shape=[3,4], axes=[1,2])
-        
-        # Set the layer's variables to simulate standard normalization
-        layer.variables[0].assign(tf.math.reduce_mean(x, axis=[0,3]))  # Set mean to observed mean
-        layer.variables[1].assign(tf.math.reduce_std(x, axis=[0,3]))
-
-        @tf.function
-        def graph_round_trip(x): return layer.invert(y_hat=layer(x=x))
-
-        x_observed = graph_round_trip(x)
-        
         # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call and invert methods of ActivationNormalization are equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ActivationNormalizationdWithExecutionMode(mfl.ActivationNormalization):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ActivationNormalizationdWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 5; width = 3; height = 4; channel_count = 2
+        
+        # Create coupling layer for eager mode
+        eager_layer = ActivationNormalizationdWithExecutionMode(shape=[3,4], axes=[1,2])
+        eager_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Create coupling layer for graph mode
+        graph_layer = ActivationNormalizationdWithExecutionMode(shape=[3,4], axes=[1,2])
+        graph_layer.build(input_shape=[batch_size, width, height, channel_count])
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_layer(inputs=x) 
+            x = graph_layer.invert(y_hat=y_hat)
+            return x, is_eager
+        
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_layer(inputs=x)
+        x_target = eager_layer.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of ActivationNormalization is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class ActivationNormalizationdWithExecutionMode(mfl.ActivationNormalization):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(ActivationNormalizationdWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 5; width = 3; height = 4; channel_count = 2
+        x = tf.random.uniform(shape=[batch_size,width, height, channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Create coupling layer for eager mode
+        eager_layer = ActivationNormalizationdWithExecutionMode(shape=[width,height], axes=[1,2])
+        eager_layer(inputs=x)
+
+        # Create coupling layer for graph mode
+        symbolic_layer = mfl.ActivationNormalization(shape=[width, height], axes=[1,2])        
+        symbolic_layer(inputs=x)
+
+        # Copy weights from eager layer to symbolic layer
+        for eager_var, symbolic_var in zip(eager_layer.variables, symbolic_layer.variables):
+            symbolic_var.assign(cp.deepcopy(eager_var))
+
+        # Make symbolic layer symbolic with functional API
+        input = tf.keras.Input(shape=[width, height, channel_count])    
+        y_hat, j_hat = symbolic_layer(input)
+        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
+
+        # Observe models output
+        x = tf.random.uniform(shape=[batch_size,width, height, channel_count], dtype=tf.keras.backend.floatx())
+        x_target, j_target, is_eager = eager_layer(inputs=x)
+        x_observed, j_observed = symbolic_model(x)
+
+        # Evaluate
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
@@ -1800,7 +2634,7 @@ class TestActivationNormalization(unittest.TestCase):
 
 class TestFlowModel(unittest.TestCase):
 
-    def create_model(stage_count: int, M, N) -> mfl.FlowModel:
+    def create_model(stage_count, M, N, type) -> mfl.FlowModel:
         
         # Prepare a sequence of layers
         layers = [None] * (6*stage_count+1)
@@ -1815,26 +2649,247 @@ class TestFlowModel(unittest.TestCase):
             
             # Coupling block, stretches some regions of space more than others
             # Couple first half of dimensions, 
-            mask_1 = mms.CheckerBoard(axes=[1], shape=[N]) # We need to mask out half of the dimensions
+            mask_1 = mms.CheckerBoardMask(axes=[1], shape=[N]) # We need to mask out half of the dimensions
             compute_coupling_parameters_1 = tf.keras.Sequential(layers=[tf.keras.layers.Dense(units=4*N, activation='relu'), tf.keras.layers.Dense(units=N, activation=None)]) # We use half of the dimensions to compute coupling parameters to be added to the other half of the dimension
             layers[6*i+2] = mfl.AdditiveCoupling(axes=[1], shape=[N], compute_coupling_parameters=compute_coupling_parameters_1, mask=mask_1) # This layer applies the mask, computes the coupling parameters and adds them to the other half of dimensions
-            layers[6*i+3] = mfl.CheckerBoard(axes=[1], shape=[N]) # This layer permutes the dimensions in line with the previously chosen mask
+            layers[6*i+3] = mfl.CheckerBoardPermutation(axes=[1], shape=[N]) # This layer permutes the dimensions in line with the previously chosen mask
 
             # Couple second half of dimensions
             compute_coupling_parameters_2 = tf.keras.Sequential(layers=[tf.keras.layers.Dense(units=4*N, activation='relu'), tf.keras.layers.Dense(units=N, activation=None)])
-            mask_2 = mms.CheckerBoard(axes=[1], shape=[N])
+            mask_2 = mms.CheckerBoardMask(axes=[1], shape=[N])
             layers[6*i+4] = mfl.AdditiveCoupling(axes=[1], shape=[N], compute_coupling_parameters=compute_coupling_parameters_2, mask=mask_2)
-            layers[6*i+5] = mfl.CheckerBoard(axes=[1], shape=[N])
+            layers[6*i+5] = mfl.CheckerBoardPermutation(axes=[1], shape=[N])
 
             # End with another normalization layer
             layers[6*i+6] = mfl.ActivationNormalization(axes=[1], shape=[N])
         
         # Construct the network
-        flow_model = mfl.FlowModel(layers) # Essentially a keras Sequential model with the added benefit of computing the jacbian determinant and inverse of the overall flow
+        flow_model = type(layers) # Essentially a keras Sequential model with the added benefit of computing the jacbian determinant and inverse of the overall flow
         flow_model.build(input_shape=[M, N]) # Pass a symbolic tensor through the model to help the tensorflow backend register all computations
 
         # Outputs
         return flow_model
+
+    def test_eager_vs_graph_call_equivalence(self):
+        """Tests whether the call method of FlowModel is equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class FlowModelWithExecutionMode(mfl.FlowModel):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(FlowModelWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 5; width = 3; height = 4; channel_count = 2
+        
+        # Create coupling layer for eager mode
+        eager_model = TestFlowModel.create_model(stage_count=2, M=batch_size, N=width*height*channel_count, type=FlowModelWithExecutionMode)
+
+        # Create coupling layer for graph mode
+        graph_model = TestFlowModel.create_model(stage_count=2, M=batch_size, N=width*height*channel_count, type=FlowModelWithExecutionMode)
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_model.variables, graph_model.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width * height * channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, j_target, is_eager = eager_model(inputs=x)
+        x_target = eager_model.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, j_observed, is_eager = graph_model(inputs=x) 
+            x = graph_model.invert(y_hat=y_hat)
+            return x, j_observed, is_eager
+        
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_model.variables, graph_model.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, j_target, is_eager = eager_model(inputs=x)
+        x_target = eager_model.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, j_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+    def test_eager_vs_graph_round_trip_equivalence(self):
+        """Tests whether the call method of FlowModel is equivalent in graph mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class FlowModelWithExecutionMode(mfl.FlowModel):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(FlowModelWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        # Prepare shape
+        batch_size = 5; width = 3; height = 4; channel_count = 2
+        
+        # Create coupling layer for eager mode
+        eager_model = TestFlowModel.create_model(stage_count=2, M=batch_size, N=width*height*channel_count, type=FlowModelWithExecutionMode)
+
+        # Create coupling layer for graph mode
+        graph_model = TestFlowModel.create_model(stage_count=2, M=batch_size, N=width*height*channel_count, type=FlowModelWithExecutionMode)
+
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_model.variables, graph_model.variables):
+            graph_var.assign(cp.deepcopy(eager_var))
+
+        # Prepare input
+        x = tf.random.uniform(shape=[batch_size, width * height * channel_count], dtype=tf.keras.backend.floatx())
+        
+        # Observe eager
+        x_target, _, is_eager = eager_model(inputs=x)
+        x_target = eager_model.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        @tf.function # This wrap prompts graph mode
+        def graph_call(x): 
+            y_hat, _, is_eager = graph_model(inputs=x) 
+            x = graph_model.invert(y_hat=y_hat)
+            return x, is_eager
+        
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+        # Now, change the weights and see if the outputs are still equivalent. 
+        # It could be that the first call created a graph that declared some weights as constants that are not updated when the weights are manually changed.
+        # Ensure weight equality
+        for eager_var, graph_var in zip(eager_model.variables, graph_model.variables):
+            eager_var.assign(tf.random.uniform(shape=eager_var.shape, dtype=tf.keras.backend.floatx()))
+            graph_var.assign(cp.deepcopy(eager_var))
+            
+        # Observe eager
+        x_target, _, is_eager = eager_model(inputs=x)
+        x_target = eager_model.invert(y_hat=x_target)
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        # Observe graph mode
+        x_observed, is_eager = graph_call(x=x)
+        self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
+
+        # Evaluate
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
+
+    def test_symbolic_vs_eager_call_equivalence(self):
+        """Tests whether the call method of FlowModel is equivalent in symbolic mode and in regular eager mode."""
+
+        # Create a thin wrapper that tracks execution mode
+        class FlowModelWithExecutionMode(mfl.FlowModel):
+            def call(self, inputs, **kwargs):
+                y_hat, log_det_jacobian = super(FlowModelWithExecutionMode, self).call(inputs=inputs, **kwargs)
+                is_eager = tf.executing_eagerly() 
+                return y_hat, log_det_jacobian, is_eager
+                
+        def create_symbolic_model(stage_count, M, N) -> mfl.FlowModel:
+            
+            # Prepare a sequence of layers
+            s=6
+            layers = [None] * (s*stage_count+1)
+            
+            # Start with a normalization layer
+            layers[0] = mfl.ActivationNormalization(axes=[1], shape=[N])
+            
+            for i in range(stage_count):
+                
+                # Reflection layer, flips point cloud about a hyperplane
+                layers[s*i+1] = mfl.Reflection(axes=[1], shape=[N], reflection_count=1)
+                
+                # Coupling block, stretches some regions of space more than others
+                # Couple first half of dimensions, 
+                mask_1 = mms.CheckerBoardMask(axes=[1], shape=[N]) # We need to mask out half of the dimensions
+                compute_coupling_parameters_1 = tf.keras.Sequential(layers=[tf.keras.layers.Dense(units=4*N, activation='relu'), tf.keras.layers.Dense(units=N, activation=None)]) # We use half of the dimensions to compute coupling parameters to be added to the other half of the dimension
+                layers[s*i+2] = mfl.AdditiveCoupling(axes=[1], shape=[N], compute_coupling_parameters=compute_coupling_parameters_1, mask=mask_1) # This layer applies the mask, computes the coupling parameters and adds them to the other half of dimensions
+                layers[s*i+3] = mfl.CheckerBoardPermutation(axes=[1], shape=[N]) # This layer permutes the dimensions in line with the previously chosen mask
+
+                # Couple second half of dimensions
+                compute_coupling_parameters_2 = tf.keras.Sequential(layers=[tf.keras.layers.Dense(units=4*N, activation='relu'), tf.keras.layers.Dense(units=N, activation=None)])
+                mask_2 = mms.CheckerBoardMask(axes=[1], shape=[N])
+                layers[s*i+4] = mfl.AdditiveCoupling(axes=[1], shape=[N], compute_coupling_parameters=compute_coupling_parameters_2, mask=mask_2)
+                layers[s*i+5] = mfl.CheckerBoardPermutation(axes=[1], shape=[N])
+
+                # End with another normalization layer
+                layers[s*i+6] = mfl.ActivationNormalization(axes=[1], shape=[N])
+            
+            # Construct the network
+            input = tf.keras.Input(shape=[N])
+            output_x, output_j = layers[0](inputs=input)
+            for layer in layers[1:]:
+                output_x, j = layer(inputs=output_x)
+                output_j += j
+            output = (output_x, output_j)
+            
+            flow_model = tf.keras.Model(inputs=input, outputs=output) # Essentially a keras Sequential model with the added benefit of computing the jacbian determinant and inverse of the overall flow
+            flow_model.build(input_shape=[M, N]) # Pass a symbolic tensor through the model to help the tensorflow backend register all computations
+
+            # Outputs
+            return flow_model
+        
+        # Prepare shape
+        batch_size = 5; width = 3; height = 4; channel_count = 2
+        x = tf.random.uniform(shape=[batch_size, width * height * channel_count], dtype=tf.keras.backend.floatx())
+
+        # Create coupling layer for eager mode
+        eager_model = TestFlowModel.create_model(stage_count=1, M=batch_size, N=width*height*channel_count, type=FlowModelWithExecutionMode)
+        eager_model(inputs=x) # Ensure model is built
+
+        # Create coupling layer for graph mode
+        symbolic_model = create_symbolic_model(stage_count=1, M=batch_size, N=width*height*channel_count)       
+        symbolic_model(inputs=x) # Ensure model is built
+
+        # Copy weights from eager layer to symbolic layer
+        for eager_var, symbolic_var in zip(eager_model.variables, symbolic_model.variables):
+            symbolic_var.assign(cp.deepcopy(eager_var))
+
+        # Observe models output
+        x_target, j_target, is_eager = eager_model(inputs=x)
+        x_observed, j_observed = symbolic_model(x)
+
+        # Evaluate
+        self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
+
+        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
+
+        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
+        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
     def test_compute_jacobian_determinant_2_axes_axis_1(self):
         """Tests whether the a multi-layerd flow model can compute the jacobian determinant on 2-axes inputs along axis 1"""
@@ -1844,13 +2899,13 @@ class TestFlowModel(unittest.TestCase):
         gtds.reset_random_number_generators(seed=123)
 
         batch_size = 8; dimensionality = 3
-        flow_model = TestFlowModel.create_model(stage_count=2, M=batch_size, N=dimensionality)
+        flow_model = TestFlowModel.create_model(stage_count=2, M=batch_size, N=dimensionality, type = mfl.FlowModel)
         x = tf.reshape(tf.range(0,1,delta=1/(batch_size*dimensionality),dtype=tf.keras.backend.floatx())**2, [batch_size, dimensionality])
         
         # Compute jacobian
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = flow_model(x)
+            y, _ = flow_model(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -1868,7 +2923,7 @@ class TestFlowModel(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1], shape=[7])
+        mask = mms.CheckerBoardMask(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -1877,7 +2932,7 @@ class TestFlowModel(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -1908,7 +2963,7 @@ class TestFlowModel(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2)
@@ -1934,7 +2989,7 @@ class TestFlowModel(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=5) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -1968,7 +3023,7 @@ class TestFlowModel(unittest.TestCase):
         # Target
         with tf.GradientTape() as tape:
             tape.watch(x)
-            y = layer(x)
+            y, _ = layer(x)
             J = tape.jacobian(y,x)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
@@ -1997,7 +3052,7 @@ class TestFlowModel(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -2024,7 +3079,7 @@ class TestFlowModel(unittest.TestCase):
         with tf.GradientTape() as tape:
             tape.watch(x_new)
             x = mask.re_arrange(x_new=x_new) # Copuling expects default arrangement of x
-            y = layer(x)
+            y, _ = layer(x)
             y = mask.arrange(x=y) # For J, ensure that entries selected by mask are also leading in y
             J = tape.jacobian(y,x_new)
         J = tf.reduce_sum(J, axis=5) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
@@ -2052,7 +3107,7 @@ class TestFlowModel(unittest.TestCase):
         model.build(input_shape=x.shape) 
 
         # Observe 
-        y_hat_1 = model(x=x)
+        y_hat_1, _ = model(inputs=x)
         path = os.path.join(os.getcwd(), "temporary_model_directory_for_additive_coupling_layer_unit_test.weights.h5")
         model.save_weights(path)
 
@@ -2071,10 +3126,13 @@ class TestFlowModel(unittest.TestCase):
         os.remove(path)
             
         # Observe second - this should now match y_hat_1
-        y_hat_2 = loaded_model(x=x)
+        y_hat_2, _ = loaded_model(inputs=x)
         
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
     '''
+
+if __name__ == '__main__':
+    TestFlowModel().test_symbolic_vs_eager_call_equivalence()

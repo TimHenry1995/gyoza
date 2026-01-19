@@ -4,7 +4,8 @@ from abc import ABC
 from typing import List
 import copy as cp
 
-class Mask(tf.keras.Model, ABC):
+@tf.keras.utils.register_keras_serializable()
+class Mask(tf.keras.layers.Layer):
     """This class can be used to curate half of the elements of a tensor :math:`x`. An input :math:`x` to this layer is expected
     to have ``shape`` along ``axes``. It is then flattened along these ``axes`` and the ``mask`` is applied. Thereafter, :math:`x`
     is unflattened and returned. 
@@ -18,10 +19,10 @@ class Mask(tf.keras.Model, ABC):
     :type mask: :class:`tensorflow.Tensor`
     """
 
-    def __init__(self, axes: List[int], shape: List[int], mask: tf.Tensor):
+    def __init__(self, axes: List[int], shape: List[int], mask: tf.Tensor, **kwargs) -> "Mask":
 
         # Super
-        super(Mask, self).__init__()
+        super(Mask, self).__init__(**kwargs)
 
         self._axes_ = cp.copy(axes)
         """(:class:`List[int]`) - The axes along which the selection shall be applied."""
@@ -143,8 +144,24 @@ class Mask(tf.keras.Model, ABC):
 
         # Outputs
         return x
-       
-class Heaviside(Mask):
+    
+    def get_config(self):
+        
+        # Super
+        config = super(Mask, self).get_config()
+        
+        # Update config
+        config.update(
+            {"shape": self._shape_, 
+             "axes":self._axes_, 
+             "mask": self._mask_}
+        )
+        
+        # Outputs
+        return config
+
+@tf.keras.utils.register_keras_serializable()       
+class HeavisideMask(Mask):
     """Applies a `Heaviside <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function to its input :math:`x`, e.g. 0001111. 
     **IMPORTANT:** The Heaviside function is defined on a vector, yet by the requirement of :class:`Mask`, inputs :math:`x` to this 
     layer are allowed to have more than one axis in ``axes``. As described in :class:`Mask`, an input :math:`x` is first flattened 
@@ -156,7 +173,7 @@ class Heaviside(Mask):
     :type axes: List[int]
     """
 
-    def __init__(self, axes: int, shape: int):
+    def __init__(self, axes: int, shape: int, **kwargs) -> "HeavisideMask":
         
         # Set up mask
         mask = np.ones(shape=shape)
@@ -165,9 +182,20 @@ class Heaviside(Mask):
         mask = tf.constant(mask) 
 
         # Super
-        super(Heaviside, self).__init__(axes=axes, shape=shape, mask=mask)
+        super(HeavisideMask, self).__init__(axes=axes, shape=shape, mask=mask, **kwargs)
 
-class CheckerBoard(Mask):
+    @classmethod
+    def from_config(cls, config):
+        
+        # Construct instance
+        config.pop("mask") # The mask is constructed internally
+        instance = cls(**config)
+        
+        # Outputs
+        return instance
+    
+@tf.keras.utils.register_keras_serializable()
+class CheckerBoardMask(Mask):
     """A mask of ones and zeros arranged in a `checkerboard <https://en.wikipedia.org/wiki/Check_(pattern)>`_ . 
         
     :param axes: The axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
@@ -177,7 +205,7 @@ class CheckerBoard(Mask):
     :type shape: :class:`List[int]`
     """
 
-    def __init__(self, axes: List[int], shape: List[int]) -> None:
+    def __init__(self, axes: List[int], shape: List[int], **kwargs) -> "CheckerBoardMask":
         
         # Set up mask
         mask = np.zeros(shape) 
@@ -199,4 +227,14 @@ class CheckerBoard(Mask):
         mask = tf.constant(mask) 
         
         # Super
-        super(CheckerBoard, self).__init__(axes=axes, shape=shape, mask=mask)
+        super(CheckerBoardMask, self).__init__(axes=axes, shape=shape, mask=mask, **kwargs)
+
+    @classmethod
+    def from_config(cls, config):
+        
+        # Construct instance
+        config.pop("mask") # The mask is constructed internally
+        instance = cls(**config)
+        
+        # Outputs
+        return instance

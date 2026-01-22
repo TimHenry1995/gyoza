@@ -6,20 +6,20 @@ import copy as cp
 
 @tf.keras.utils.register_keras_serializable()
 class Mask(tf.keras.layers.Layer):
-    """This class can be used to curate half of the elements of a tensor :math:`x`. An input :math:`x` to this layer is expected
-    to have ``shape`` along ``axes``. It is then flattened along these ``axes`` and the ``mask`` is applied. Thereafter, :math:`x`
-    is unflattened and returned. 
+    """This class can be used to let half of the elements of a tensor :math:`x` pass through while cancelling the ohter half.
+    An input :math:`x` to this layer is expected to have `shape` along `axes`. It is then flattened along these `axes` and 
+    the `mask` is applied. Thereafter, :math:`x` is unflattened and returned. 
     
     :param axes: The axes along which the selection shall be applied.
     :type axes: :class:`List[int]`
-    :param shape: The shape that input :math:`x` to this layer has along ``axes``.
+    :param shape: The shape that input :math:`x` to this layer has along `axes`.
     :type shape: :class:`List[int]`
     :param mask: The mask to be applied to data passing through this layer. Its shape is expected to be a vector with 
-        product(``shape``) many entries. 
+        product(`shape`) many entries. 
     :type mask: :class:`tensorflow.Tensor`
     """
 
-    def __init__(self, axes: List[int], shape: List[int], mask: tf.Tensor, **kwargs) -> "Mask":
+    def __init__(self, axes: List[int], shape: List[int], mask: tf.Tensor, **kwargs) -> None:
 
         # Super
         super(Mask, self).__init__(**kwargs)
@@ -28,7 +28,7 @@ class Mask(tf.keras.layers.Layer):
         """(:class:`List[int]`) - The axes along which the selection shall be applied."""
 
         self._shape_ = cp.copy(shape)
-        """(:class:`List[int]`) - The shape that input :math:`x` to this layer has along ``axes``."""
+        """(:class:`List[int]`) - The shape that input :math:`x` to this layer has along `axes`."""
 
         mask = tf.cast(mask, dtype=tf.keras.backend.floatx())
         mask = tf.keras.ops.reshape(mask, newshape=[-1]) # Ensure it is flattened
@@ -36,20 +36,20 @@ class Mask(tf.keras.layers.Layer):
         """(:class:`tensorflow.Tensor) - The mask to be applied to input :math:`x` to this layer."""
 
         self.__from_to__ = Mask._compute_from_to_(mask=mask)
-        """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`arrange` and :py:meth:`re_arrange`."""
+        """(:class:`tensorflow.Tensor) - A matrix that defines the mapping during :py:meth:`gyoza.modelling.masks.Mask.arrange` and :py:meth:`gyoza.modelling.masks.Mask.re_arrange`."""
 
         self.built = True # This is set to prevent a warning saying that serialzation for mask is skipped becuase mask is not built
 
     @staticmethod
     def _compute_from_to_(mask: tf.Tensor) -> tf.Tensor:
-        """Sets up a matrix that can be used to arrange all elements of an input x (after flattening) such the ones marked with a 1 
-        by the mask appear first while the ones marked with a zero occur last.
+        """Sets up a matrix that can be used to arrange all elements of an input :math:`x` (after flattening) such those marked with a 1 
+        by the mask appear first while those marked with a zero occur last.
         
         :param mask: The mask that defines the mapping. It can be of arbitrary shape since it will be flattened internally.
         :type mask: tensorflow.Tensor.
-        :return: from_to (tensorflow.Tensor) - The matrix that determines the mapping on flattened inputs. Note: to arrange elements
-            of an input x one has to flatten x along the mask dimension first, then broadcast ``from_to`` to fit the new shape of x.
-            After matrix multiplication of the two one needs to undo the flattening to get the arrange x."""
+        :return: from_to (tensorflow.Tensor) - The matrix that determines the mapping on flattened inputs. **Note**: to arrange elements
+            of an input :math:`x` one has to flatten :math:`x` along the mask dimension first, then broadcast `from_to` to fit the new shape of :math:`x`.
+            After matrix multiplication of the two, one needs to undo the flattening to get the arranged :math:`x`."""
 
         # Determine indices
         from_indices = tf.concat([tf.where(mask), tf.where(1-mask)],0).numpy()[:,0].tolist()
@@ -64,14 +64,13 @@ class Mask(tf.keras.layers.Layer):
         return from_to
 
     def call(self, x: tf.Tensor, is_positive: bool = True) -> tf.Tensor:
-        """Applies the binary mask of self to ``x``.
+        """Applies the binary mask of self to `x`.
 
-        :param x: The data to be masked. The expected shape of ``x`` depends on the axis and shape specified during initialization.
+        :param x: The data to be masked. The expected shape of `x` depends on the axis and shape specified during initialization.
         :type x: :class:`tensorflow.Tensor`
         :param is_positive: Indicates whether the positive or negative mask version shall be applied, where negative == 1 - positive.
-            Default is True.
-        :type is_positive: bool, optional
-        :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as ``x``.
+        :type is_positive: bool, optional, default == True
+        :return: x_masked (:class:`tensorflow.Tensor`) - The masked data of same shape as `x`.
         """
 
         # Set parity of mask
@@ -97,12 +96,12 @@ class Mask(tf.keras.layers.Layer):
         return x_masked
 
     def arrange(self, x: tf.Tensor) -> tf.Tensor:
-        """Arranges ``x`` into a vector such that all elements set to 0 by :py:meth:`mask` are enumerated first and all elements 
-        that passed the mask are enumerated last.
+        """Arranges `x` into a vector such that all elements set to 0 by :py:meth:`gyoza.modelling.masks.Mask.mask` are enumerated first and all elements 
+        that passed through the mask are enumerated last.
 
-        :param x: The data to be arranged. The shape is assumed to be compatible with :py:meth:`mask`.
+        :param x: The data to be arranged. The shape is assumed to be compatible with :py:meth:`gyoza.modelling.masks.Mask.mask`.
         :type x: :class:`tensorflow.Tensor`
-        :return: x_flat (:class:`tensorflow.Tensor`) - The arranged version of ``x`` whose shape is flattened along the first axis
+        :return: x_flat (:class:`tensorflow.Tensor`) - The arranged version of `x` whose shape is flattened along the first axis
             of attribute :py:attr:`_axes_`.
         """
         
@@ -122,12 +121,12 @@ class Mask(tf.keras.layers.Layer):
         return x_new
     
     def re_arrange(self, x_new: tf.Tensor) -> tf.Tensor:
-        """This function is the inverse of :py:meth:`arrange`.
+        """This function is the inverse of :py:meth:`gyoza.modelling.masks.Mask.arrange`.
         
-        :param x_new: The output of :py:meth:`arrange`.
+        :param x_new: The output of :py:meth:`gyoza.modelling.masks.Mask.arrange`.
         :type x: :class:`tensorflow.Tensor`
         
-        :return: x (tensorflow.Tensor) - The input to :py:meth:`arrange`."""
+        :return: x (tensorflow.Tensor) - The input to :py:meth:`gyoza.modelling.masks.Mask.arrange`."""
 
         # Move self._axes_[0] to end
         x_new = utt.swop_axes(x=x_new, from_axis=self._axes_[0], to_axis=-1)
@@ -164,8 +163,8 @@ class Mask(tf.keras.layers.Layer):
 class HeavisideMask(Mask):
     """Applies a `Heaviside <https://en.wikipedia.org/wiki/Heaviside_step_function>`_ function to its input :math:`x`, e.g. 0001111. 
     **IMPORTANT:** The Heaviside function is defined on a vector, yet by the requirement of :class:`Mask`, inputs :math:`x` to this 
-    layer are allowed to have more than one axis in ``axes``. As described in :class:`Mask`, an input :math:`x` is first flattened 
-    along ``axes`` and thus Heaviside can be applied. For background information see :class:`Mask`.
+    layer are allowed to have more than one axis in `axes`. As described in :class:`Mask`, an input :math:`x` is first flattened 
+    along `axes` and thus Heaviside can be applied. For background information see :class:`Mask`.
     
     :param shape: See base class :class:`Mask`.
     :type shape: List[int]
@@ -201,7 +200,7 @@ class CheckerBoardMask(Mask):
     :param axes: The axes along which the checkerboard pattern shall be applied. Assumed to be consecutive indices, e.g. 
         [2,3] or [3,4].
     :type axes: :class:`List[int]`
-    :param shape: The shape of the mask along ``axes``, e.g. 64*32 if an input :math:`x` has shape [10,3,64,32] and ``axes`` == [2,3].
+    :param shape: The shape of the mask along `axes`, e.g. 64*32 if an input :math:`x` has shape [10,3,64,32] and `axes` == [2,3].
     :type shape: :class:`List[int]`
     """
 

@@ -117,7 +117,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         x_target = x
 
         # Observe
-        x_observed = layer.invert(y_hat=y_hat)
+        x_observed = layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -140,7 +140,7 @@ class TestAdditiveCoupling(unittest.TestCase):
         x_target = x
 
         # Observe
-        x_observed = layer.invert(y_hat=y_hat)
+        x_observed = layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -497,14 +497,14 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, j_observed, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, j_observed, is_eager
         
         x_observed, j_observed, is_eager = graph_call(x=x)
@@ -527,7 +527,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -576,14 +576,14 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, _, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, is_eager
         
         x_observed, is_eager = graph_call(x=x)
@@ -602,7 +602,7 @@ class TestAdditiveCoupling(unittest.TestCase):
             
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -694,8 +694,8 @@ class TestAdditiveCoupling(unittest.TestCase):
 
         # Evaluate
         self.assertEqual(first=model.built, second=True)
-        self.assertEqual(first=model.flow_layers[0].built, second=True)
-        self.assertEqual(first=model.flow_layers[0]._compute_coupling_parameters_.built, second=True)
+        self.assertEqual(first=model._flow_layers_[0].built, second=True)
+        self.assertEqual(first=model._flow_layers_[0]._compute_coupling_parameters_.built, second=True)
 
 class TestShuffle(unittest.TestCase):
 
@@ -709,7 +709,7 @@ class TestShuffle(unittest.TestCase):
         
         # Observe
         y_hat, _ = shuffling_layer(inputs=x)
-        x_hat = shuffling_layer.invert(y_hat=y_hat)
+        x_hat = shuffling_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -725,7 +725,7 @@ class TestShuffle(unittest.TestCase):
         
         # Observe
         y_hat, _ = shuffling_layer(inputs=x)
-        x_hat = shuffling_layer.invert(y_hat=y_hat)
+        x_hat = shuffling_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -820,14 +820,14 @@ class TestShuffle(unittest.TestCase):
         
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, j_observed, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, j_observed, is_eager
         
         x_observed, j_observed, is_eager = graph_call(x=x)
@@ -850,7 +850,7 @@ class TestShuffle(unittest.TestCase):
             
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -894,14 +894,14 @@ class TestShuffle(unittest.TestCase):
         
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, _, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, is_eager
         
         x_observed, is_eager = graph_call(x=x)
@@ -920,7 +920,7 @@ class TestShuffle(unittest.TestCase):
             
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -928,57 +928,6 @@ class TestShuffle(unittest.TestCase):
         self.assertEqual(first = is_eager, second = False) # If eager, something is wrong here.
 
         # Evaluate
-        self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
-
-    def test_symbolic_vs_eager_call_equivalence(self):
-        """Tests whether the call method of Shuffle is equivalent in symbolic mode and in regular eager mode."""
-
-        # Create a thin wrapper that tracks execution mode
-        class ShuffleWithExecutionMode(mfl.ShufflePermutation):
-            def call(self, inputs, **kwargs):
-                y_hat, log_det_jacobian = super(ShuffleWithExecutionMode, self).call(inputs=inputs, **kwargs)
-                is_eager = tf.executing_eagerly() 
-                return y_hat, log_det_jacobian, is_eager
-                
-        # Shape
-        batch_size = 2; width = 4; height = 5; channel_count = 3
-
-        # Create coupling layer for eager mode
-        # Initialize
-        eager_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
-        
-        # Create coupling layer for graph mode
-        graph_layer = mfl.ShufflePermutation(shape=[width, height], axes=[1,2])
-
-        # Ensure weight equality
-        for eager_var, graph_var in zip(eager_layer.variables, graph_layer.variables):
-            graph_var.assign(cp.deepcopy(eager_var))
-
-        # Prepare input
-        x = tf.random.uniform(shape=[batch_size, width, height, channel_count], dtype=tf.keras.backend.floatx())
-        
-        # Observe eager
-        x_target, j_target = layer(inputs=x)
-
-        # Symbolic mode
-        symbolic_compute_coupling_parameters = tf.keras.layers.Conv2D(filters=input_shape[-1], kernel_size=[2,2], padding='same')
-        symbolic_mask = mms.CheckerBoardMask(axes=[1,2], shape=input_shape[-3:-1])
-        symbolic_layer = mfl.AdditiveCoupling(axes=[1,2], shape=input_shape[-3:-1], compute_coupling_parameters=symbolic_compute_coupling_parameters, mask=symbolic_mask)
-        
-        # copy weights from eager layer to symbolic layer
-        for var, symbolic_var in zip(layer.variables, symbolic_layer.variables):
-            symbolic_var.assign(var)
-
-        input = tf.keras.Input(shape=input_shape[-3:])    
-        y_hat, j_hat = layer(input)
-        symbolic_model = tf.keras.Model(inputs=input, outputs=[y_hat, j_hat])
-        x_observed, j_observed = symbolic_model(x)
-
-        # Evaluate
-        self.assertTupleEqual(tuple1=tuple(j_target.shape), tuple2=tuple(j_observed.shape))
-        self.assertAlmostEqual(first=tf.reduce_max((j_observed-j_target)**2).numpy(), second=0)
-
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
         self.assertAlmostEqual(first=tf.reduce_max((x_observed-x_target)**2).numpy(), second=0)
 
@@ -1011,9 +960,9 @@ class TestShuffle(unittest.TestCase):
 
         # Evaluate
         self.assertEqual(first=model.built, second=True)
-        self.assertEqual(first=model.flow_layers[0].built, second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_forward_permutation_'), second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_inverse_permutation_'), second=True)
+        self.assertEqual(first=model._flow_layers_[0].built, second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_forward_permutation_'), second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_inverse_permutation_'), second=True)
 
     def test_eager_vs_graph_call_equivalence(self):
         """Tests whether the call method of Shuffle is equivalent in graph mode and in regular eager mode."""
@@ -1045,14 +994,14 @@ class TestShuffle(unittest.TestCase):
         
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, j_observed, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, j_observed, is_eager
         
         x_observed, j_observed, is_eager = graph_call(x=x)
@@ -1075,7 +1024,7 @@ class TestShuffle(unittest.TestCase):
             
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -1120,14 +1069,14 @@ class TestShuffle(unittest.TestCase):
         
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, _, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, is_eager
         
         x_observed, is_eager = graph_call(x=x)
@@ -1146,7 +1095,7 @@ class TestShuffle(unittest.TestCase):
             
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -1388,7 +1337,7 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Observe
         y_hat, _ = permutation_layer(inputs=x)
-        x_hat = permutation_layer.invert(y_hat=y_hat)
+        x_hat = permutation_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -1404,7 +1353,7 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Observe
         y_hat, _ = permutation_layer(inputs=x)
-        x_hat = permutation_layer.invert(y_hat=y_hat)
+        x_hat = permutation_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -1420,7 +1369,7 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Observe
         y_hat, _ = permutation_layer(inputs=x)
-        x_hat = permutation_layer.invert(y_hat=y_hat)
+        x_hat = permutation_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -1456,14 +1405,14 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, j_observed, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, j_observed, is_eager
         
         x_observed, j_observed, is_eager = graph_call(x=x)
@@ -1486,7 +1435,7 @@ class TestCheckerBoard(unittest.TestCase):
             
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -1531,14 +1480,14 @@ class TestCheckerBoard(unittest.TestCase):
         
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, _, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, is_eager
         
         x_observed, is_eager = graph_call(x=x)
@@ -1557,7 +1506,7 @@ class TestCheckerBoard(unittest.TestCase):
             
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -1642,9 +1591,9 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Evaluate
         self.assertEqual(first=model.built, second=True)
-        self.assertEqual(first=model.flow_layers[0].built, second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_forward_permutation_'), second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_inverse_permutation_'), second=True)
+        self.assertEqual(first=model._flow_layers_[0].built, second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_forward_permutation_'), second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_inverse_permutation_'), second=True)
 
 class TestReflection(unittest.TestCase):
 
@@ -1716,7 +1665,7 @@ class TestReflection(unittest.TestCase):
 
         # Observe
         y_hat, _ = reflection_layer(inputs=x)
-        x_hat = reflection_layer.invert(y_hat=y_hat)
+        x_hat = reflection_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -1732,7 +1681,7 @@ class TestReflection(unittest.TestCase):
 
         # Observe
         y_hat, _ = reflection_layer(inputs=x)
-        x_hat = reflection_layer.invert(y_hat=y_hat)
+        x_hat = reflection_layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x.shape), tuple2=tuple(x_hat.shape))
@@ -2045,8 +1994,8 @@ class TestReflection(unittest.TestCase):
 
         # Evaluate
         self.assertEqual(first=model.built, second=True)
-        self.assertEqual(first=model.flow_layers[0].built, second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_reflection_normals_'), second=True)
+        self.assertEqual(first=model._flow_layers_[0].built, second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_reflection_normals_'), second=True)
 
 class TestActivationNormalization(unittest.TestCase):
     def test_init_1_axis(self):
@@ -2249,7 +2198,7 @@ class TestActivationNormalization(unittest.TestCase):
 
         # Observe
         y_hat, _ = layer(x)
-        x_observed = layer.invert(y_hat=y_hat)
+        x_observed = layer.invert(outputs=y_hat)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x.shape))
@@ -2441,14 +2390,14 @@ class TestActivationNormalization(unittest.TestCase):
         
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, j_observed, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, j_observed, is_eager
         
         x_observed, j_observed, is_eager = graph_call(x=x)
@@ -2471,7 +2420,7 @@ class TestActivationNormalization(unittest.TestCase):
             
         # Observe eager
         x_target, j_target, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -2516,14 +2465,14 @@ class TestActivationNormalization(unittest.TestCase):
         
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, _, is_eager = graph_layer(inputs=x) 
-            x = graph_layer.invert(y_hat=y_hat)
+            x = graph_layer.invert(outputs=y_hat)
             return x, is_eager
         
         x_observed, is_eager = graph_call(x=x)
@@ -2542,7 +2491,7 @@ class TestActivationNormalization(unittest.TestCase):
             
         # Observe eager
         x_target, _, is_eager = eager_layer(inputs=x)
-        x_target = eager_layer.invert(y_hat=x_target)
+        x_target = eager_layer.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -2628,9 +2577,9 @@ class TestActivationNormalization(unittest.TestCase):
 
         # Evaluate
         self.assertEqual(first=model.built, second=True)
-        self.assertEqual(first=model.flow_layers[0].built, second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_location_'), second=True)
-        self.assertEqual(first=hasattr(model.flow_layers[0], '_scale_'), second=True)
+        self.assertEqual(first=model._flow_layers_[0].built, second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_location_'), second=True)
+        self.assertEqual(first=hasattr(model._flow_layers_[0], '_scale_'), second=True)
 
 class TestFlowModel(unittest.TestCase):
 
@@ -2698,14 +2647,14 @@ class TestFlowModel(unittest.TestCase):
         
         # Observe eager
         x_target, j_target, is_eager = eager_model(inputs=x)
-        x_target = eager_model.invert(y_hat=x_target)
+        x_target = eager_model.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, j_observed, is_eager = graph_model(inputs=x) 
-            x = graph_model.invert(y_hat=y_hat)
+            x = graph_model.invert(outputs=y_hat)
             return x, j_observed, is_eager
         
         x_observed, j_observed, is_eager = graph_call(x=x)
@@ -2728,7 +2677,7 @@ class TestFlowModel(unittest.TestCase):
             
         # Observe eager
         x_target, j_target, is_eager = eager_model(inputs=x)
-        x_target = eager_model.invert(y_hat=x_target)
+        x_target = eager_model.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -2771,14 +2720,14 @@ class TestFlowModel(unittest.TestCase):
         
         # Observe eager
         x_target, _, is_eager = eager_model(inputs=x)
-        x_target = eager_model.invert(y_hat=x_target)
+        x_target = eager_model.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
         @tf.function # This wrap prompts graph mode
         def graph_call(x): 
             y_hat, _, is_eager = graph_model(inputs=x) 
-            x = graph_model.invert(y_hat=y_hat)
+            x = graph_model.invert(outputs=y_hat)
             return x, is_eager
         
         x_observed, is_eager = graph_call(x=x)
@@ -2797,7 +2746,7 @@ class TestFlowModel(unittest.TestCase):
             
         # Observe eager
         x_target, _, is_eager = eager_model(inputs=x)
-        x_target = eager_model.invert(y_hat=x_target)
+        x_target = eager_model.invert(outputs=x_target)
         self.assertEqual(first = is_eager, second = True) # If not eager, something is wrong here.
 
         # Observe graph mode
@@ -2910,7 +2859,7 @@ class TestFlowModel(unittest.TestCase):
         J = tf.reduce_sum(J, axis=2) # This axis is redundant, see section on batch jacobians in https://www.tensorflow.org/guide/advanced_autodiff#jacobians
         
         # Verify determinants
-        x_observed = flow_model.compute_jacobian_determinant(x=x)
+        _, x_observed = flow_model(inputs=x)
         for j in range(J.shape[0]):
             self.assertAlmostEqual(first=np.log(np.abs(np.linalg.det(J[j].numpy()))), second=x_observed[j].numpy(), places=5)
 
@@ -2944,7 +2893,7 @@ class TestFlowModel(unittest.TestCase):
         
         # Evaluate
         self.assertEqual(first=x_observed, second=True)
-    '''
+    
     def test_call_triangular_jacobian_3_axes_input_checker_board_2_axes_mask(self):
         """Tests whether the call method of AdditiveCoupling produces a triangular jacobian on 3-axes inputs 
         with checker board 2_axes mask."""
@@ -2954,7 +2903,7 @@ class TestFlowModel(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,7])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,7])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14*3,dtype=tf.keras.backend.floatx()), [3,2,7])
 
@@ -2980,7 +2929,7 @@ class TestFlowModel(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
@@ -3013,7 +2962,7 @@ class TestFlowModel(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1], shape=[7])
+        mask = mms.CheckerBoardMask(axes=[1], shape=[7])
         layer = mfl.AdditiveCoupling(axes=[1], shape=[7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14,dtype=tf.keras.backend.floatx()), [2,7])
 
@@ -3040,7 +2989,7 @@ class TestFlowModel(unittest.TestCase):
             tf.keras.layers.Lambda(lambda x: x[tf.newaxis,:]),
             tf.keras.layers.Dense(units=7),
             tf.keras.layers.Lambda(lambda x: tf.squeeze(x))]) 
-        mask = mms.CheckerBoard(axes=[1,2], shape=[2,7])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[2,7])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[2,7], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(14*3,dtype=tf.keras.backend.floatx()), [3,2,7])
 
@@ -3067,7 +3016,7 @@ class TestFlowModel(unittest.TestCase):
 
         # Initialize
         compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-        mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
+        mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
         layer = mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask)
         x = tf.reshape(tf.range(2*5*6,dtype=tf.keras.backend.floatx()), [2,5,6,1]) # Shape == [batch size, height, width, channel count]
 
@@ -3095,8 +3044,8 @@ class TestFlowModel(unittest.TestCase):
         def build_flow_model():
             """Function to create a fresh, unbuilt model architecture."""
             compute_coupling_parameters = tf.keras.layers.Conv2D(filters=1, kernel_size=[2,2], padding='same')
-            mask = mms.CheckerBoard(axes=[1,2], shape=[5,6])
-            model = mfl.FlowModel()
+            mask = mms.CheckerBoardMask(axes=[1,2], shape=[5,6])
+            model = mfl.FlowModel([])
             model.add(mfl.AdditiveCoupling(axes=[1,2], shape=[5,6], compute_coupling_parameters=compute_coupling_parameters, mask=mask))
             return model
 
@@ -3132,7 +3081,7 @@ class TestFlowModel(unittest.TestCase):
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(y_hat_1.shape), tuple2=tuple(y_hat_2.shape))
         self.assertEqual(first=tf.reduce_sum((y_hat_1-y_hat_2)**2).numpy(), second=0)
-    '''
+    
 
 if __name__ == '__main__':
     TestFlowModel().test_symbolic_vs_eager_call_equivalence()

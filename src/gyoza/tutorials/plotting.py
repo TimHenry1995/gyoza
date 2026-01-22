@@ -484,7 +484,7 @@ def plot_inverse_point(position: float, residual: float, S: np.ndarray, network:
     plt.figure(figsize=(3.5,3.5)); plt.title(rf"Inverse Modelling on ${manifold_name}$")
 
     # Predict position using network
-    Z_tilde = np.array([[residual,position]], dtype=tf.keras.backend.floatx())
+    Z_tilde = tf.constant([[residual,position]], dtype=tf.keras.backend.floatx())
     Z = network.invert(Z_tilde)
     plt.scatter(Z[:,0], Z[:,1])
 

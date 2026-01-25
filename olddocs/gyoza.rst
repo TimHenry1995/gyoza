@@ -8,7 +8,6 @@ Subpackages
    :maxdepth: 4
 
    gyoza.modelling
-   gyoza.tutorials
    gyoza.utilities
 
 Module contents

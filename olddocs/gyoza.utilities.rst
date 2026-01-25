@@ -4,6 +4,14 @@ gyoza.utilities package
 Submodules
 ----------
 
+gyoza.utilities.math module
+---------------------------
+
+.. automodule:: gyoza.utilities.math
+   :members:
+   :undoc-members:
+   :show-inheritance:
+
 gyoza.utilities.tensors module
 ------------------------------
 

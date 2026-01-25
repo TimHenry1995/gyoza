@@ -1,23 +1,13 @@
 .. gyoza documentation master file, created by
-   sphinx-quickstart on Mon Jun  5 21:49:47 2023.
+   sphinx-quickstart on Fri Jan 23 11:43:09 2026.
    You can adapt this file completely to your liking, but it should at least
    contain the root `toctree` directive.
 
 Welcome to gyoza's documentation!
 =================================
 
-This package can be used to build invertible artificial neural networks, also known as flow transformations.
-The below diagram illustrates the structure of modules and their classes. 
-
-.. image:: images/Class_Diagram.png
-  :width: 600
-  :alt: Here you should see a module diagram.
-
-
-For each module a detailed description can be found via the following index:
-
 .. toctree::
-   :maxdepth: 4
+   :maxdepth: 2
    :caption: Contents:
 
    modules

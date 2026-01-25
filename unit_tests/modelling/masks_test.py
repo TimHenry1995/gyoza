@@ -15,7 +15,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[0], shape=[10])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -32,7 +32,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[0], shape=[11])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -49,7 +49,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[1], shape=[5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -66,7 +66,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[0], shape=[3])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -84,7 +84,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[1,2], shape=[3,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -102,7 +102,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[0,2], shape=[2,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -125,7 +125,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[2,3], shape=[4,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -143,7 +143,7 @@ class TestHeaviside(unittest.TestCase):
         
         # Observe
         instance = mms.HeavisideMask(axes=[1,2,3], shape=[3,4,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -161,7 +161,7 @@ class TestHeaviside(unittest.TestCase):
 
         # Observe
         instance = mms.HeavisideMask(axes=[1], shape=[5])
-        x_observed = instance.call(x=x, is_positive=False)
+        x_observed = instance.call(inputs=x, is_positive=False)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -182,7 +182,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[0], shape=[10])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -201,7 +201,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[1], shape=[5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -220,7 +220,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[0], shape=[3])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -240,7 +240,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[1], shape=[5])
-        x_observed = instance.call(x=x, is_positive=False)
+        x_observed = instance.call(inputs=x, is_positive=False)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -261,7 +261,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[0,1], shape=[3,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -282,7 +282,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[1,2], shape=[3,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -303,7 +303,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[1,2], shape=[3,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))
@@ -327,7 +327,7 @@ class TestCheckerBoard(unittest.TestCase):
 
         # Observe
         instance = mms.CheckerBoardMask(axes=[1,2,3], shape=[3,4,5])
-        x_observed = instance.call(x=x)
+        x_observed = instance.call(inputs=x)
 
         # Evaluate
         self.assertTupleEqual(tuple1=tuple(x_target.shape), tuple2=tuple(x_observed.shape))

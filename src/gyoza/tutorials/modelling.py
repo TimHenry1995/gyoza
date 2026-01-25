@@ -1,8 +1,10 @@
 import numpy as np
-from typing import List
+from typing import List, Tuple
 import random
+from gyoza.modelling import flow_layers as gmfl
+from gyoza.tutorials import plotting as gtp, data_synthesis as gtds
 
-def cross_validate(Z: np.ndarray, Y: np.ndarray, target_correlations: List[float], networks: List[mfl.SupervisedFactorModel], batch_size: int, epoch_count: int, manifold_name: str, plot_losses: bool = False) -> Tuple[List[np.ndarray], List[np.ndarray]]:
+def cross_validate(Z: np.ndarray, Y: np.ndarray, target_correlations: List[float], networks: List[gmfl.DisentanglingFlowModel], batch_size: int, epoch_count: int, manifold_name: str, plot_losses: bool = False) -> Tuple[List[np.ndarray], List[np.ndarray]]:
     """Performs cross-validation on the provided networks. It first shuffles the data ``Z`` and ``Y``, then partitions it into fold-count many
     equally sized subsets and then calibrates each network on the data set-minus one subset of the partition. The held out subsets are returned
     for model evaluationl. The fold-count is inferred from the length of ``network``. This implementation assumes that the networks are
@@ -55,10 +57,10 @@ def cross_validate(Z: np.ndarray, Y: np.ndarray, target_correlations: List[float
         # Calibrate
         train_indices = indices[:k*fold_size] + indices[(k+1)*fold_size:]
         M = len(train_indices)
-        iterator = mdis.volatile_factorized_pair_iterator(X=Z[train_indices,:], Y=Y[train_indices,:], batch_size=batch_size, target_correlations=target_correlations)
+        iterator = gtds.factorized_pair_iterator(X=Z[train_indices,:], Y=Y[train_indices,:], batch_size = batch_size, target_correlations=target_correlations)
         epoch_loss_means, epoch_loss_standard_deviations = networks[k].fit(iterator=iterator, epoch_count=epoch_count, batch_count=M//batch_size)
 
-        if plot_losses: plot_loss_trajectory(epoch_loss_means=epoch_loss_means, epoch_loss_standard_deviations=epoch_loss_standard_deviations, manifold_name=manifold_name)
+        if plot_losses: gtp.plot_loss_trajectory(epoch_loss_means=epoch_loss_means, epoch_loss_standard_deviations=epoch_loss_standard_deviations, manifold_name=manifold_name)
 
         # Save test indices
         test_indices = indices[k*fold_size:(k+1)*fold_size]

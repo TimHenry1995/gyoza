@@ -1,21 +1,22 @@
-update the version in conf.py of docs AND update version number in pyproject.toml 
+For the Documentation:
+- From within your project root folder, call the terminal command "sphinx-quickstart docs" and make sure you enter all required metadata in the dialogue
+- Replace the generated conf file with your own.
+- Ensure you have a .readthedocs.yaml file that instructs readthedocs on how to install your library
+- Update the version in conf.py of docs AND update version number in pyproject.toml to the same number
+- Inside docs directory delete all files that are created by the command sphinx-apidoc -o docs src/gyoza to make sure they will be overidden next
+- From within the project directory call sphinx-apidoc -o docs src/gyoza
+- Ensure the conf.py has the following code at the top of the file
+  import os, sys
+  for x in os.walk('.'):
+    sys.path.insert(0, x[0])
 
-Documentation
-ensure requirements.txt contains all new libraries
-inside docs directory delete all files that are created by the command sphinx-apidoc -o docs src/gyoza to make sure they will be overidden next
-from within project directory call sphinx-apidoc -o docs src/gyoza
-ensure the conf.py has the following code at the top of the file
-import os, sys
-for x in os.walk('.'):
-  sys.path.insert(0, x[0])
+  for x in os.walk('..'):
+    sys.path.insert(0, x[0])
 
-for x in os.walk('..'):
-  sys.path.insert(0, x[0])
+  for x in os.walk(os.path.join("..","..")):
+    sys.path.insert(0, x[0])
 
-for x in os.walk(os.path.join("..","..")):
-  sys.path.insert(0, x[0])
-
-ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.todo','sphinx.ext.viewcode','sphinx.ext.autodoc']
+Ensure conf.py has theme 'sphinx_rtd_theme', ensure extensions = ['sphinx.ext.todo','sphinx.ext.viewcode','sphinx.ext.autodoc']
 
 cd to docs directory, run make html
 

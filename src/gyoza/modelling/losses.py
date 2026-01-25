@@ -6,8 +6,8 @@ import copy as cp
 
 class SupervisedFactorLoss(tf.keras.losses.Loss):
     r"""
-    This loss can be used to incentivize the entries of the output vector of a flow network to be arranged according to semantic 
-    factors of the data with multivariate normal distribution. It implements the following formula:
+    This loss can be used to incentivize the entries of the output vector of a :py:class:`~gyoza.modelling.flow_layers.FlowModel` to be
+    arranged according to semantic factors of the data with multivariate normal distribution. It implements the following formula:
 
     .. math:: 
         \mathcal{L} = \sum_{F=1}^{K} \mathbb{E}_{(z^a,z^b) \sim p(z^a, z^b | F) } l(z^a, z^b | F)
@@ -25,10 +25,11 @@ class SupervisedFactorLoss(tf.keras.losses.Loss):
     :math:`T'(z^a)` is the Jacobian of :math:`T` and :math:`\sigma_{ab}` is the clustering strength of instances (see below). 
     The factors can be thought of as independent components. A factor :math:`k` spreading across :math:`N_k` entries of the 
     output vector is incentivised by this loss to represent the similarity of two inputs :math:`z^a` and :math:`z^b` along one and 
-    only one concept. For instance, factors can represent color, roughness, size, animal species, or material. The loss expects 
-    training instances to come in pairs :math:`z^a` and :math:`z^b` for each such factor. A pair should have strong positive 
-    association :math:`\sigma` such that the corresponding factor can capture the underlying concept of similarity. Yet, the 
-    association shall be (on average) close to zero for all other factors. See also :class:`UnsupervisedFactorLoss`.
+    only one concept. For instance, factors can represent color, texture, size, animal species, or material. The loss expects 
+    training instances to come in pairs :math:`z^a` and :math:`z^b`. The correlation of the instances of a pair should 
+    be captured by :math:`\sigma_{ab}` (alias for ``y_true`` in :py:class:`~gyoza.modelling.losses.SupervisedFactorLoss.call`)
+    such that the corresponding factor can capture the underlying concept of similarity. Yet, the association shall be (on average)
+    close to zero for all other factors. 
 
     :param dimensions_per_factor: A list of integers that enumerates the number of dimensions (entries in a vector) of the factors thought to underly
         the representation of :math:`z^{\sim}`. These shall include the residual factor at index 0 which collect all variation not captured by the 

@@ -1,4 +1,4 @@
-![Image](https://github.com/TimHenry1995/gyoza/blob/develop/docs/images/logo.png?raw=true)
+![Image]([https://github.com/TimHenry1995/gyoza/blob/develop/docs/images/logo.png?raw=true](https://github.com/TimHenry1995/gyoza/blob/main/docs/Inference%20on%20Arc.png?raw=true))
 ## Installation
 ```
 pip install gyoza
@@ -12,5 +12,6 @@ A tutorial can be found in the [tutorials](https://github.com/TimHenry1995/gyoza
 
 ## Development
 Developers can access the package via [GitHub](https://github.com/TimHenry1995/gyoza)
+
 
 

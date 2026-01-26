@@ -3,7 +3,7 @@
 ## Description
 This repository provides code to build invertible disentangling flow models that can help to reshape complicated high-dimensional data-clouds (manifolds) into simpler, often low-dimensional manifolds which can be visualized more easily. Apart from visualization, it is also possible to map any changes made in the projected space back onto the original manifold. This has applications in interpreting and systematcially manipulating latent spaces of artificial neural networks.
 
-![til](./docs/Inverse Model on Arc.gif)
+![til](https://raw.githubusercontent.com/hashrocket/hr-til/master/app/assets/images/banner.png)
 ## Installation
 ```
 pip install gyoza
@@ -17,6 +17,7 @@ A tutorial can be found in the [tutorials](https://github.com/TimHenry1995/gyoza
 
 ## Development
 Developers can access the package via [GitHub](https://github.com/TimHenry1995/gyoza)
+
 
 
 

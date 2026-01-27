@@ -3,7 +3,7 @@ This repository provides code to build invertible disentangling flow models that
 
 ![Image](https://github.com/TimHenry1995/gyoza/blob/main/docs/Inference%20on%20Arc.png?raw=true)
 
-Apart from visualization, it is also possible to **map any changes made in the projected space back onto the original manifold**. The below animation shows how one can slide along the position dimension (vertical axis of right panel in above figure) of the model's output and use the flow model's **inverse** to map the changes back onto the original manifold. One can do the same for the residual dimension (corresponding to sliding along the horizontal axis in right panel of the above figure). The type of flow models built with Gyoza are trivially invertible which means this systematic manipulation of points along the manifold is possible at no additional cost.
+Apart from visualization, it is also possible to **map any changes made in the projected space back onto the original manifold**. The below animation shows how one can slide along the position dimension (vertical axis of right panel in above figure) of the model's output and use the flow model's **inverse** to map the changes back onto the original manifold. One can do the same for the residual dimension (corresponding to sliding along the horizontal axis in the right panel of the above figure). The type of flow models built with Gyoza are trivially invertible, which means this systematic manipulation of points along the manifold is possible at no additional cost.
 
 ![til](https://github.com/TimHenry1995/gyoza/blob/main/docs/Inverse%20Model%20on%20Arc.gif?raw=true)
 
@@ -28,6 +28,7 @@ The main resources used to write the code of this toolbox are
 - Sankar, A., Keicher, M., Eisawy, R., Parida, A., Pfister, F., Kim, S., T. & Navab, N. (2021) “GLOWin: A Flow-based Invertible Generative Framework for Learning Disentangled Feature Representations in Medical Images” [arXiv:2103.10868](https://arxiv.org/abs/2103.10868)
 - Meng, C., Song, Y., Song, J. & Ermon, S. (2020) “Gaussianization Flows” [arXiv:2003.01941](https://arxiv.org/abs/2003.01941)
 - Esser, P., Rombach, R., & Ommer, B. (2020). “A Disentangling Invertible Interpretation Network for Explaining Latent Representations.” [arXiv:2004.13166](https://arxiv.org/abs/2004.13166)
+
 
 
 
